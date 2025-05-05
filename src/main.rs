@@ -1,47 +1,33 @@
 //! Demonstrate the use of a blocking `Delay` using the SYST (sysclock) timer.
 
-#![deny(unsafe_code)]
-#![allow(clippy::empty_loop)]
 #![no_main]
 #![no_std]
 
-// Halt on panic
-use panic_halt as _; // panic handler
-use defmt_rtt as _;
-use defmt::info;
+use defmt::*;
+use embassy_executor::{Spawner, main, task};
+use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_time::Timer;
+use {defmt_rtt as _, panic_probe as _};
 
-use cortex_m_rt::entry;
-use stm32f4xx_hal as hal;
+#[main]
+async fn main(spawner: Spawner) {
+    let peripherals = embassy_stm32::init(Default::default());
+    info!("Hello World!");
 
-use crate::hal::{pac, prelude::*};
+    let led = Output::new(peripherals.PA5, Level::High, Speed::Low);
 
-#[entry]
-fn main() -> ! {
-    if let (Some(dp), Some(cp)) = (
-        pac::Peripherals::take(),
-        cortex_m::peripheral::Peripherals::take(),
-    ) {
-        // Set up the LED. On the Nucleo-446RE it's connected to pin PA5.
-        let gpioa = dp.GPIOA.split();
-        let mut led = gpioa.pa5.into_push_pull_output();
+    spawner.spawn(blink(led)).unwrap();
+}
 
-        // Set up the system clock. We want to run at 48MHz for this one.
-        let rcc = dp.RCC.constrain();
-        let clocks = rcc.cfgr.sysclk(48.MHz()).freeze();
+#[task]
+async fn blink(mut led: Output<'static>) -> ! {
+    loop {
+        info!("high");
+        led.set_high();
+        Timer::after_millis(2000).await;
 
-        // Create a delay abstraction based on SysTick
-        let mut delay = cp.SYST.delay(&clocks);
-
-        loop {
-            info!("led on");
-            led.set_high();
-            delay.delay_ms(2000);
-
-            info!("led off");
-            led.set_low();
-            delay.delay_ms(2000);
-        }
+        info!("low");
+        led.set_low();
+        Timer::after_millis(2000).await;
     }
-
-    loop {}
 }
