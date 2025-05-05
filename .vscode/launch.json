@@ -7,7 +7,7 @@
             "request": "launch",
             "preLaunchTask": "firmware_build",
             "cwd": "${workspaceFolder}",
-            "connectUnderReset": false,
+            "connectUnderReset": true,
             "chip": "STM32F446RE",
             "flashingConfig": {
                 "flashingEnabled": true,
