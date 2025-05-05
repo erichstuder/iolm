@@ -1,6 +1,4 @@
 # no settings we want to keep so far
 .vscode/settings.json
-/target
 
-# Cargo.lock will be added later
-Cargo.lock
+/target
