@@ -1,5 +1,5 @@
 [target.thumbv7em-none-eabihf]
-runner = 'probe-rs run --chip STM32F446RE'
+runner = 'probe-rs run --chip STM32F446RE --connect-under-reset'
 rustflags = [
   # `flip-link` moves stack at the end of flash
   #"-C", "linker=flip-link",
