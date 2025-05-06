@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "probe-rs launch",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "preLaunchTask": "firmware_build",
+            "cwd": "${workspaceFolder}",
+            "connectUnderReset": true,
+            "chip": "STM32F446RE",
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "haltAfterReset": true,
+            },
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/firmware",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            "dataFormat": "Defmt",
+                            "logFormat": "{t} {L:5} {s}\n{{m} @ {F}:{l}%dimmed}"
+                        }
+                    ]
+                }
+            ],
+        }
+    ]
+}

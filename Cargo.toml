@@ -1,0 +1,21 @@
+[package]
+name = "firmware"
+version = "0.0.0" # Versioning is done automatically. This is just a placeholder.
+edition = "2021"
+
+[dependencies]
+embassy-stm32 = { version = "=0.2.0", features = ["defmt", "stm32f446re", "unstable-pac", "memory-x", "time-driver-tim4", "exti", "chrono"]}
+embassy-sync = { version = "=0.6.2", features = ["defmt"] }
+embassy-executor = { version = "=0.7.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
+embassy-time = { version = "0.4.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embedded-hal = "=1.0.0"
+nb = "=1.1.0"
+cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "=0.7.5"
+critical-section = "=1.2.0"
+panic-probe = { version = "=1.0.0", features = ["print-defmt"] }
+defmt = "=1.0.1"
+defmt-rtt = "=1.0.0"
+
+[profile.release]
+debug = 2
