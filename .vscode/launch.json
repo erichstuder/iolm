@@ -16,7 +16,7 @@
             "coreConfigs": [
                 {
                     "coreIndex": 0,
-                    "programBinary": "target/thumbv7em-none-eabihf/debug/firmware",
+                    "programBinary": "examples/stm32f446re/target/thumbv7em-none-eabihf/debug/firmware",
                     "rttEnabled": true,
                     "rttChannelFormats": [
                         {
