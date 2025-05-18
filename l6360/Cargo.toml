@@ -1,0 +1,11 @@
+[package]
+name = "l6360"
+version = "0.0.0"
+edition = "2021"
+include = ["doc/**/*"]
+
+[dependencies]
+embedded-hal-async = "=1.0.0"
+
+[dev-dependencies]
+tokio = { version = "=1.45.0", features = ["macros", "rt-multi-thread"] }
