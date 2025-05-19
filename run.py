@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from project_management.executor import Executor
+from project_management.executor import Executor # type: ignore
 
 if __name__ == "__main__":
     additional_arguments = [
@@ -14,7 +14,7 @@ if __name__ == "__main__":
     ex = Executor(additional_arguments, description='Execute feature tests')
 
     if ex.arguments.build:
-        commands = 'cargo build'
+        commands = 'cd examples/stm32f446re && cargo build'
     else:
         commands = None
 
