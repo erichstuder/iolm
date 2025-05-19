@@ -1,7 +1,7 @@
 //! Demonstrate the use of a blocking `Delay` using the SYST (sysclock) timer.
 
 #![no_main]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 use defmt::*;
 use embassy_executor::{Spawner, main, task};

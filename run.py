@@ -8,6 +8,11 @@ if __name__ == "__main__":
             'flag': '-b',
             'name': '--build',
             'help': 'Build the software.'
+        },
+        {
+            'flag': '-t',
+            'name': '--test',
+            'help': 'Test the software.'
         }
     ]
 
@@ -15,6 +20,8 @@ if __name__ == "__main__":
 
     if ex.arguments.build:
         commands = 'cd examples/stm32f446re && cargo build'
+    elif ex.arguments.test:
+        commands = 'cargo test --manifest-path l6360/Cargo.toml'
     else:
         commands = None
 
