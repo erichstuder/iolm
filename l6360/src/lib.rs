@@ -45,13 +45,6 @@ impl<I2cType: I2c> L6360<I2cType> {
             let parity_and_reg_addr = (parity << 5) | (reg_addr_start + i as u8);
             self.i2c.write(self.address_7bit, &[led_pattern_msb_lsb[i], parity_and_reg_addr]).await?;
         }
-
-        // for (i, &byte) in pattern.to_be_bytes().iter().enumerate() {
-        //     let parity = Self::calculate_parity(byte);
-        //     let reg_addr = reg_addr_start + i as u8;
-        //     let data = [byte, (parity << 5) | reg_addr];
-        //     self.i2c.write(self.address_7bit, &data).await?;
-
         Ok(())
     }
 
