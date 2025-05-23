@@ -50,8 +50,15 @@ async fn main(spawner: Spawner) {
             i2c_config
         },
     );
-    let mut _l6360 = L6360::new(i2c, 0b1100_000).unwrap();
-    // l6360.set_led_pattern(l6360::Led::LED1, 0xFF00).await.unwrap();
+    let pins = l6360::Pins {
+        ENL_plus: Output::new(peripherals.PA6, Level::Low, Speed::Low),
+    };
+    let mut l6360 = L6360::new(i2c, 0b1100_000, pins).unwrap();
+    l6360.set_control_register_1().await.unwrap();
+    l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
+    l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
+    l6360.enable_ENL_plus().unwrap();
+    Timer::after_millis(100_000).await;
 }
 
 #[task]

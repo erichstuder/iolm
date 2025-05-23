@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 
 use embedded_hal_async::i2c::I2c;
+use embedded_hal::digital::OutputPin;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Led {
@@ -8,19 +9,27 @@ pub enum Led {
     LED2,
 }
 
+#[allow(non_camel_case_types)]
+pub struct Pins<T: OutputPin> {
+    #[allow(non_snake_case)]
+    pub ENL_plus: T,
+}
+
 #[derive(Debug)]
 pub enum Error {
     Invalid7bitAddress,
 }
 
-pub struct L6360<I2cType: I2c> {
+pub struct L6360<I2cType: I2c, OutputPinType: OutputPin> {
     i2c: I2cType,
     address_7bit: u8,
+    pins: Pins<OutputPinType>
 }
 
-impl<I2cType: I2c> L6360<I2cType> {
-
-    pub fn new(i2c: I2cType, address_7bit: u8) -> Result<Self, Error> {
+impl<I2cType: I2c, OutputPinType: OutputPin> L6360<I2cType, OutputPinType>
+{
+    pub fn new(i2c: I2cType, address_7bit: u8, pins: Pins<OutputPinType>) -> Result<Self, Error>
+    {
         // address is 7 bit and must have the form 0b1100_xxx
         if !(0b0_1100_000..=0b0_1100_111).contains(&address_7bit) {
             return Err(Error::Invalid7bitAddress);
@@ -29,7 +38,21 @@ impl<I2cType: I2c> L6360<I2cType> {
         Ok(Self {
             i2c,
             address_7bit,
+            pins,
         })
+    }
+
+    #[allow(non_snake_case)]
+    pub fn enable_ENL_plus(&mut self) -> Result<(), OutputPinType::Error> {
+        self.pins.ENL_plus.set_high()
+    }
+
+    pub async fn set_control_register_1(&mut self) -> Result<(), I2cType::Error> {
+        let data: u8 = 0b1010_0001;
+        let parity = Self::calculate_parity(data);
+        let parity_and_reg_addr = (parity << 5) | (0b0010 as u8);
+        self.i2c.write(self.address_7bit, &[data, parity_and_reg_addr]).await?;
+        Ok(())
     }
 
     pub async fn set_led_pattern(&mut self, led: Led, pattern: u16) -> Result<(), I2cType::Error> {
