@@ -1,7 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 
 use embedded_hal_async::i2c::{self, I2c};
-use embedded_hal::digital::OutputPin;
+use embedded_hal::digital::{OutputPin, InputPin};
 pub use embedded_hal::digital::PinState;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -35,8 +35,13 @@ pub enum Led {
     LED2,
 }
 
-pub struct Pins<OutputPinType: OutputPin> {
+pub struct Pins<OutputPinType, InputPinType>
+where
+    OutputPinType: OutputPin,
+    InputPinType: InputPin,
+{
     pub enl_plus: OutputPinType,
+    pub out_cq: InputPinType,
 }
 
 #[derive(Debug)]
@@ -48,23 +53,25 @@ pub enum Error<I2cError> {
 
 type L6360result<T, I2C> = Result<T, Error<<I2C as i2c::ErrorType>::Error>>;
 
-pub struct L6360<I2C, OutputPinType>
+pub struct L6360<I2C, OutputPinType, InputPinType>
 where
     I2C: I2c,
     OutputPinType: OutputPin,
+    InputPinType: InputPin,
 {
     i2c: I2C,
     address_7bit: i2c::SevenBitAddress,
-    pub pins: Pins<OutputPinType>,
+    pub pins: Pins<OutputPinType, InputPinType>,
     config: Config,
 }
 
-impl<I2C, OutputPinType> L6360<I2C, OutputPinType>
+impl<I2C, OutputPinType, InputPinType> L6360<I2C, OutputPinType, InputPinType>
 where
     I2C: I2c,
     OutputPinType: OutputPin,
+    InputPinType: InputPin,
 {
-    pub fn new(i2c: I2C, address_7bit: i2c::SevenBitAddress, pins: Pins<OutputPinType>, config: Config) -> L6360result<Self, I2C> {
+    pub fn new(i2c: I2C, address_7bit: i2c::SevenBitAddress, pins: Pins<OutputPinType, InputPinType>, config: Config) -> L6360result<Self, I2C> {
         if !(0b0_1100_000..=0b0_1100_111).contains(&address_7bit) {
             return Err(Error::Invalid7bitAddress);
         }

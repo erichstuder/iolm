@@ -5,11 +5,13 @@
 
 use defmt::*;
 use embassy_executor::{Spawner, main, task};
-use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::gpio::{Output, Level, Speed, Pull};
+use embassy_stm32::exti::ExtiInput;
 use embassy_stm32::i2c::{self, I2c};
 use embassy_stm32::bind_interrupts;
 use embassy_stm32::peripherals;
 use embassy_stm32::time::Hertz;
+use embassy_time::Instant;
 // use embassy_stm32::usart::{Config, Uart};
 use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
@@ -53,6 +55,7 @@ async fn main(spawner: Spawner) {
 
     let pins = l6360::Pins {
         enl_plus: Output::new(peripherals.PA6, Level::Low, Speed::Low),
+        out_cq: ExtiInput::new(peripherals.PA10, peripherals.EXTI10, Pull::None),
     };
 
     let config = l6360::Config {
@@ -66,7 +69,42 @@ async fn main(spawner: Spawner) {
     l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
     l6360.pins.enl_plus.set_high();
+
+    spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
+
     Timer::after_millis(100_000).await;
+}
+
+#[task]
+async fn measure_ready_pulse(mut pin: ExtiInput<'static>) -> ! {
+    loop {
+        if pin.is_high() {
+            info!("pin is high");
+        }
+        else {
+            info!("pin is low");
+        }
+
+        // Note:
+        // This implementation of recognizing the Ready-Pulse is not maximaly accurate.
+        // On high load the pulse would not be measured accurately.
+        // It would be better to measure the pulse length directly with a timer.
+        // Currently PA10 is used which does not offer this possibility.
+        // The STEVAL-IOM001V1 would with minor changes also allow to use PA1 where it should be possible.
+
+        // Note:
+        // Incoming signals are inverted by the L6360
+        info!("waiting for pulse...");
+        pin.wait_for_falling_edge().await;
+        let start = Instant::now();
+        // Note: info! messages here would take too much time.
+        pin.wait_for_rising_edge().await;
+        let end = Instant::now();
+        info!("pulse received");
+
+        let high_time_us = (end - start).as_micros();
+        info!("Pin was high for {} us", high_time_us);
+    }
 }
 
 #[task]
@@ -85,11 +123,11 @@ async fn run_statemachine() {
 #[task]
 async fn blink(mut led: Output<'static>) -> ! {
     loop {
-        info!("high");
+        //info!("high");
         led.set_high();
         Timer::after_millis(2000).await;
 
-        info!("low");
+        //info!("low");
         led.set_low();
         Timer::after_millis(2000).await;
     }
