@@ -61,7 +61,7 @@ async fn main(spawner: Spawner) {
         }
     };
 
-    let mut l6360 = L6360::new(i2c, pins, 0b1100_000, config).unwrap();
+    let mut l6360 = L6360::new(i2c, 0b1100_000, pins, config).unwrap();
     l6360.init().await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();

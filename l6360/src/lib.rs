@@ -4,10 +4,7 @@ use embedded_hal_async::i2c::{self, I2c};
 use embedded_hal::digital::OutputPin;
 pub use embedded_hal::digital::PinState;
 
-#[cfg(test)]
-use mockall::automock;
-
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum EN_CGQ_CQ_PullDown {
     OFF,
@@ -67,7 +64,7 @@ where
     I2C: I2c,
     OutputPinType: OutputPin,
 {
-    pub fn new(i2c: I2C, pins: Pins<OutputPinType>, address_7bit: i2c::SevenBitAddress, config: Config) -> L6360result<Self, I2C> {
+    pub fn new(i2c: I2C, address_7bit: i2c::SevenBitAddress, pins: Pins<OutputPinType>, config: Config) -> L6360result<Self, I2C> {
         if !(0b0_1100_000..=0b0_1100_111).contains(&address_7bit) {
             return Err(Error::Invalid7bitAddress);
         }
@@ -138,54 +135,10 @@ where
     }
 }
 
-// #[cfg_attr(test, automock)]
-// trait SetRegister<I2C: I2c> {
-//     async fn set_register(&mut self, register_address: u8, data: u8) -> L6360result<(), I2C>;
-// }
-
-// struct L6360raw<I2C> {
-//     i2c: I2C,
-//     address_7bit: i2c::SevenBitAddress,
-// }
-
-// impl <I2C: I2c> SetRegister<I2C> for  L6360raw<I2C> {
-//     async fn set_register(&mut self, register_address: u8, data: u8) -> L6360result<(), I2C> {
-//         if !(0b0000..=0b1000).contains(&register_address) {
-//             return Err(Error::InvalidRegisterAddress);
-//         }
-//         let parity = Self::calculate_parity(data);
-//         let parity_and_reg_addr = (parity << 5) | (register_address);
-//         self.i2c.write(self.address_7bit, &[data, parity_and_reg_addr]).await.map_err(Error::I2cError)?;
-//         Ok(())
-//     }
-// }
-
-// impl <I2C: I2c> L6360raw<I2C> {
-//     fn calculate_parity(data: u8) -> u8 {
-//         let d0 = (data >> 0) & 1;
-//         let d1 = (data >> 1) & 1;
-//         let d2 = (data >> 2) & 1;
-//         let d3 = (data >> 3) & 1;
-//         let d4 = (data >> 4) & 1;
-//         let d5 = (data >> 5) & 1;
-//         let d6 = (data >> 6) & 1;
-//         let d7 = (data >> 7) & 1;
-
-//         let p0 = d7 ^ d6 ^ d5 ^ d4 ^ d3 ^ d2 ^ d1 ^ d0;
-//         let p1 = d7 ^ d5 ^ d3 ^ d1;
-//         let p2 = d6 ^ d4 ^ d2 ^ d0;
-
-//         (p2 << 2) | (p1 << 1) | p0
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
-    use crate::{ControlRegister1, EN_CGQ_CQ_PullDown};
-
-    use super::{L6360, Led, Pins, PinState, Config};
-    use embedded_hal_async::i2c;
-    use embedded_hal::digital::{self, OutputPin};
+    use super::*;
+    use embedded_hal::digital;
     use tokio;
     use mockall::*;
 
@@ -227,7 +180,7 @@ mod tests {
                 enl_plus: MockOutputPinType::new(),
             };
             let config = Config::default();
-            let result = L6360::new(mock_i2c, pins, address, config);
+            let result = L6360::new(mock_i2c, address, pins, config);
             if address < 0b0_1100_000 || address > 0b0_1100_111 {
                 assert!(result.is_err(), "L6360::new returned ok, with address: {:?}", address);
             }
@@ -239,110 +192,120 @@ mod tests {
 
     #[tokio::test]
     async fn test_init() {
-        let mock_i2c = MockI2c::new();
-        let pins = Pins {
-            enl_plus: MockOutputPinType::new(),
-        };
-        let config = Config {
-            control_register_1: ControlRegister1 {
-                en_cgq_cq_pulldown: EN_CGQ_CQ_PullDown::OFF
-            }
-        };
-        let i2c_address = 0b0_1100_111;
-        let mut l6360 = L6360::new(mock_i2c, pins, i2c_address, config).unwrap();
+        let en_cgq_cq_pulldown = &[
+            //setting                        //expectation
+            (EN_CGQ_CQ_PullDown::OFF,        0b0010_0001),
+            (EN_CGQ_CQ_PullDown::ON_IfEnCq0, 0b1010_0001),
+        ];
 
-        // mock_i2c
-        //     .expect_write()
-        //     .times(1)
-        //     .withf(move |address, bytes| {
-        //         *address == *i2c_address &&
-        //         bytes.len() == 2 &&
-        //         bytes[0] == *write_byte_01 &&
-        //         bytes[1] == *write_byte_11
-        //     })
-        //     .returning(|_, _| Ok(()));
+        for (en_cgq_cq_pulldown, reg_value) in en_cgq_cq_pulldown.iter() {
+            let mut mock_i2c = MockI2c::new();
+            let i2c_address = 0b0_1100_111;
+            let pins = Pins {
+                enl_plus: MockOutputPinType::new(),
+            };
+            let config = Config {
+                control_register_1: ControlRegister1 {
+                    en_cgq_cq_pulldown: *en_cgq_cq_pulldown
+                }
+            };
 
-        l6360.init().await.unwrap();
+            mock_i2c
+                .expect_write()
+                .times(1)
+                .withf(move |address, bytes| {
+                    *address == i2c_address &&
+                    bytes.len() == 2 &&
+                    bytes[0] == *reg_value &&
+                    bytes[1] & 0b0000_1111 == 0b0010 // We only care for the register address here.
+                })
+                .returning(|_, _| Ok(()));
+
+            let mut l6360 = L6360::new(mock_i2c, i2c_address, pins, config).unwrap();
+            l6360.init().await.unwrap();
+        }
 
 
     }
 
-    // #[tokio::test]
-    // async fn test_set_led_pattern() {
-    //     let test_cases: &[(
-    //            // input                          // expect
-    //            u8,           Led,       u16,     u8,            u8,            u8,            u8 )] = &[
-    //         // i2c_address,  led,       pattern, write_byte_00, write_byte_10, write_byte_01, write_byte_11
-    //         (  0b0_1100_101, Led::LED1, 0x0000,  0x00,          0x04,          0x00,          0x05, ),
-    //         (  0b0_1100_111, Led::LED2, 0x0000,  0x00,          0x06,          0x00,          0x07, ),
-    //         (  0b0_1100_000, Led::LED1, 0x55AA,  0x55,          0x04,          0xAA,          0x05, ),
-    //         (  0b0_1100_001, Led::LED2, 0x1234,  0x12,          0xC6,          0x34,          0x67, ),
+    #[tokio::test]
+    async fn test_set_led_pattern() {
+        let test_cases: &[(
+               // input                          // expect
+               u8,           Led,       u16,     u8,            u8,            u8,            u8 )] = &[
+            // i2c_address,  led,       pattern, write_byte_00, write_byte_10, write_byte_01, write_byte_11
+            (  0b0_1100_101, Led::LED1, 0x0000,  0x00,          0x04,          0x00,          0x05, ),
+            (  0b0_1100_111, Led::LED2, 0x0000,  0x00,          0x06,          0x00,          0x07, ),
+            (  0b0_1100_000, Led::LED1, 0x55AA,  0x55,          0x04,          0xAA,          0x05, ),
+            (  0b0_1100_001, Led::LED2, 0x1234,  0x12,          0xC6,          0x34,          0x67, ),
 
-    //     ];
+        ];
 
-    //     let mut test_cnt = 0;
-    //     for (i2c_address, led, pattern, write_byte_00, write_byte_10, write_byte_01, write_byte_11) in test_cases {
-    //         println!("test_cnt: {:?}", test_cnt);
-    //         test_cnt += 1;
+        let mut test_cnt = 0;
+        for (i2c_address, led, pattern, write_byte_00, write_byte_10, write_byte_01, write_byte_11) in test_cases {
+            println!("test_cnt: {:?}", test_cnt);
+            test_cnt += 1;
 
-    //         let mut i2c_mock = MockI2c::new();
+            let mut i2c_mock = MockI2c::new();
+            let pins = Pins {
+                enl_plus: MockOutputPinType::new(),
+            };
 
-    //         i2c_mock
-    //             .expect_write()
-    //             .times(1)
-    //             .withf(move |address, bytes| {
-    //                 *address == *i2c_address &&
-    //                 bytes.len() == 2 &&
-    //                 bytes[0] == *write_byte_00 &&
-    //                 bytes[1] == *write_byte_10
-    //             })
-    //             .returning(|_, _| Ok(()));
+            i2c_mock
+                .expect_write()
+                .times(1)
+                .withf(move |address, bytes| {
+                    *address == *i2c_address &&
+                    bytes.len() == 2 &&
+                    bytes[0] == *write_byte_00 &&
+                    bytes[1] == *write_byte_10
+                })
+                .returning(|_, _| Ok(()));
 
-    //         i2c_mock
-    //             .expect_write()
-    //             .times(1)
-    //             .withf(move |address, bytes| {
-    //                 *address == *i2c_address &&
-    //                 bytes.len() == 2 &&
-    //                 bytes[0] == *write_byte_01 &&
-    //                 bytes[1] == *write_byte_11
-    //             })
-    //             .returning(|_, _| Ok(()));
+            i2c_mock
+                .expect_write()
+                .times(1)
+                .withf(move |address, bytes| {
+                    *address == *i2c_address &&
+                    bytes.len() == 2 &&
+                    bytes[0] == *write_byte_01 &&
+                    bytes[1] == *write_byte_11
+                })
+                .returning(|_, _| Ok(()));
 
-    //         let mut l63601 = L6360::new(i2c_mock, *i2c_address).unwrap();
-    //         l63601.set_led_pattern(*led, *pattern).await.unwrap();
-    //     }
-    // }
+            let mut l63601 = L6360::new(i2c_mock, *i2c_address, pins, Config::default()).unwrap();
+            l63601.set_led_pattern(*led, *pattern).await.unwrap();
+        }
+    }
 
-    // #[test]
-    // fn test_calculate_parity() {
-    //     let test_cases: &[(u8, u8)] = &[
-    //         // all on or off
-    //         (0b0000_0000, 0b000),
-    //         (0b1111_1111, 0b000),
-    //         // alternating
-    //         (0b1010_1010, 0b000),
-    //         (0b0101_0101, 0b000),
-    //         // one bit
-    //         (0b0000_0001, 0b101),
-    //         (0b0000_0010, 0b011),
-    //         (0b0000_0100, 0b101),
-    //         (0b0000_1000, 0b011),
-    //         (0b0001_0000, 0b101),
-    //         (0b0010_0000, 0b011),
-    //         (0b0100_0000, 0b101),
-    //         (0b1000_0000, 0b011),
-    //         // random
-    //         (0b1001_0101, 0b110),
-    //         (0b0011_0010, 0b101),
-    //     ];
+    #[test]
+    fn test_calculate_parity() {
+        let test_cases: &[(u8, u8)] = &[
+            // all on or off
+            (0b0000_0000, 0b000),
+            (0b1111_1111, 0b000),
+            // alternating
+            (0b1010_1010, 0b000),
+            (0b0101_0101, 0b000),
+            // one bit
+            (0b0000_0001, 0b101),
+            (0b0000_0010, 0b011),
+            (0b0000_0100, 0b101),
+            (0b0000_1000, 0b011),
+            (0b0001_0000, 0b101),
+            (0b0010_0000, 0b011),
+            (0b0100_0000, 0b101),
+            (0b1000_0000, 0b011),
+            // random
+            (0b1001_0101, 0b110),
+            (0b0011_0010, 0b101),
+        ];
 
-    //     println!("|    data    | expected |");
-    //     println!("|:----------:|:--------:|");
-    //     for (data, expected) in test_cases {
-    //         println!("| 0b{:08b} |   0b{:03b}  |", data, expected);
-    //         assert_eq!(L6360::<MockI2c>::calculate_parity(*data), *expected);
-    //     }
-    // }
+        println!("|    data    | expected |");
+        println!("|:----------:|:--------:|");
+        for (data, expected) in test_cases {
+            println!("| 0b{:08b} |   0b{:03b}  |", data, expected);
+            assert_eq!(L6360::<MockI2c, MockOutputPinType>::calculate_parity(*data), *expected);
+        }
+    }
 }
-
