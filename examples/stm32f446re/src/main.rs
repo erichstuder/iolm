@@ -50,14 +50,22 @@ async fn main(spawner: Spawner) {
             i2c_config
         },
     );
+
     let pins = l6360::Pins {
-        ENL_plus: Output::new(peripherals.PA6, Level::Low, Speed::Low),
+        enl_plus: Output::new(peripherals.PA6, Level::Low, Speed::Low),
     };
-    let mut l6360 = L6360::new(i2c, 0b1100_000, pins).unwrap();
-    l6360.set_control_register_1().await.unwrap();
+
+    let config = l6360::Config {
+        control_register_1: l6360::ControlRegister1 {
+            en_cgq_cq_pulldown: l6360::EN_CGQ_CQ_PullDown::ON_IfEnCq0,
+        }
+    };
+
+    let mut l6360 = L6360::new(i2c, pins, 0b1100_000, config).unwrap();
+    l6360.init().await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
-    l6360.enable_ENL_plus().unwrap();
+    l6360.pins.enl_plus.set_high();
     Timer::after_millis(100_000).await;
 }
 
