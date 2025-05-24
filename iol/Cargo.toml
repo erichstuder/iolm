@@ -1,0 +1,16 @@
+[package]
+name = "iol"
+version = "0.0.0"
+edition = "2021"
+
+[features]
+device = []
+master = []
+iols = []
+
+[dependencies]
+defmt = "=1.0.1"
+
+# [dev-dependencies]
+# tokio = { version = "=1.45.1", features = ["macros", "rt-multi-thread"] }
+# mockall = "=0.13.1"

@@ -21,6 +21,8 @@ use state_machine::{StateMachine, StateActions};
 
 use l6360::{self, L6360};
 
+use iol::master_dl::{self, DL};
+
 #[main]
 async fn main(spawner: Spawner) {
     let peripherals = embassy_stm32::init(Default::default());
@@ -71,6 +73,15 @@ async fn main(spawner: Spawner) {
     l6360.pins.enl_plus.set_high();
 
     spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
+
+
+    struct StateActionsImpl;
+    impl master_dl::StateActions for StateActionsImpl {
+
+    }
+    let dl = master_dl::DL::new(StateActionsImpl);
+    dl.DL_SetMode.call();
+
 
     Timer::after_millis(100_000).await;
 }
