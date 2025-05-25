@@ -23,6 +23,13 @@ use l6360::{self, L6360};
 
 use iol::master_dl::{self, DL};
 
+struct StateActionsImpl;
+impl master_dl::StateActions for StateActionsImpl {
+    async fn wait_ms(&self, duration: u64) {
+        Timer::after_millis(duration).await;
+    }
+}
+
 #[main]
 async fn main(spawner: Spawner) {
     let peripherals = embassy_stm32::init(Default::default());
@@ -71,19 +78,20 @@ async fn main(spawner: Spawner) {
     l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
     l6360.pins.enl_plus.set_high();
-
     spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
 
 
-    struct StateActionsImpl;
-    impl master_dl::StateActions for StateActionsImpl {
-
-    }
-    let dl = master_dl::DL::new(StateActionsImpl);
-    dl.DL_SetMode.call();
+    let mut dl = master_dl::DL::new(StateActionsImpl);
+    spawner.spawn(run_dl(dl)).unwrap();
+    let _ = dl.DL_SetMode(master_dl::Mode::STARTUP).await;
 
 
     Timer::after_millis(100_000).await;
+}
+
+#[task]
+async fn run_dl(mut dl: DL<StateActionsImpl>) {
+    dl.run().await;
 }
 
 #[task]
