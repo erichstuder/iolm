@@ -9,7 +9,7 @@ master = []
 iols = []
 
 [dependencies]
-log = "0.4.27"
+defmt = "=1.0.1"
 
 # [dev-dependencies]
 # tokio = { version = "=1.45.1", features = ["macros", "rt-multi-thread"] }

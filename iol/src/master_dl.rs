@@ -1,6 +1,9 @@
 mod master_dl_mode_handler;
 
+use core::marker::PhantomData;
+
 pub use master_dl_mode_handler::StateActions;
+pub use master_dl_mode_handler::StateMachine;
 
 pub enum Mode {
     INACTIVE,
@@ -31,19 +34,23 @@ pub struct DL<T: StateActions> {
     // pd_output_length: PDOutputLength,
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 
-    dl_mode_handler_state_machine: master_dl_mode_handler::StateMachine<T>,
+    //dl_mode_handler_state_machine: master_dl_mode_handler::StateMachine<T>,
+    dummy: PhantomData<T>,
 }
 
 impl <T: StateActions> DL<T> {
-    pub fn new(state_actions: T) -> Self {
-        Self{
-            dl_mode_handler_state_machine: master_dl_mode_handler::StateMachine::new(state_actions),
-        }
+    pub fn new(state_actions: T) -> (Self, master_dl_mode_handler::StateMachine<T>) {
+        (Self{
+            //dl_mode_handler_state_machine: master_dl_mode_handler::StateMachine::new(state_actions),
+            dummy: PhantomData,
+        },
+            master_dl_mode_handler::StateMachine::new(state_actions),
+        )
     }
 
-    pub async fn run(&mut self) {
-        self.dl_mode_handler_state_machine.run().await;
-    }
+    // pub async fn run(&mut self) {
+    //     self.dl_mode_handler_state_machine.run().await;
+    // }
 
     #[allow(non_snake_case)]
     pub async fn DL_SetMode(&mut self, mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
@@ -54,7 +61,7 @@ impl <T: StateActions> DL<T> {
         // self.on_req_data_length_per_message = value_list.on_req_data_length_per_message;
 
         // TODO: send state change request to statemachine and answer with Result => I dont like it => Remove
-        let event = match mode {
+        let _event = match mode {
             Mode::INACTIVE => master_dl_mode_handler::Event::DL_SetMode_INACTIVE,
             Mode::STARTUP => master_dl_mode_handler::Event::DL_SetMode_STARTUP,
 
@@ -62,11 +69,13 @@ impl <T: StateActions> DL<T> {
             _ => master_dl_mode_handler::Event::DL_SetMode_INACTIVE,
         };
 
-        if self.dl_mode_handler_state_machine.parse_event(event).await.is_ok() {
-            Ok(())
-        }
-        else {
-            Err(ErrorInfo::STATE_CONFLICT)
-        }
+        // if self.dl_mode_handler_state_machine.parse_event(event).await.is_ok() {
+        //     Ok(())
+        // }
+        // else {
+        //     Err(ErrorInfo::STATE_CONFLICT)
+        // }
+
+        Ok(())
     }
 }
