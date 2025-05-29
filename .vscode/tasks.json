@@ -4,7 +4,7 @@
         {
             "label": "firmware_build",
             "type": "shell",
-            "command": "./run.py --build",
+            "command": "cd examples/stm32f446re && cargo build",
             "group": {
                 "kind": "build",
                 "isDefault": true
