@@ -10,48 +10,12 @@ use embassy_stm32::exti::ExtiInput;
 // use embassy_stm32::peripherals;
 // use embassy_stm32::time::Hertz;
 use embassy_time::Instant;
-use embassy_sync::channel::Channel;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
-
-//mod state_machine;
-//use state_machine::{StateMachine, StateActions};
 
 //use l6360::{self, L6360};
 
 use iol::master_dl;
-
-static DL_MODE_HANDLER_EVENT: Channel<CriticalSectionRawMutex, iol::master_dl::Event, 1> = Channel::new();
-static DL_MODE_HANDLER_EVENT2: Channel<CriticalSectionRawMutex, Result<(), iol::master_dl::EventError>, 1> = Channel::new();
-
-struct StateActionsImpl;
-impl master_dl::StateActions for StateActionsImpl {
-    async fn wait_ms(&self, duration: u64) {
-        Timer::after_millis(duration).await;
-    }
-
-    async fn await_event(&self) -> iol::master_dl::Event {
-        DL_MODE_HANDLER_EVENT.receive().await
-    }
-
-    async fn confirm_event(&self, result: Result<(), iol::master_dl::EventError>) {
-        DL_MODE_HANDLER_EVENT2.send(result).await;
-        info!("signalled");
-    }
-}
-
-struct ActionsImpl;
-impl master_dl::Actions for ActionsImpl {
-    async fn send_dl_mode_handler_event(&self, event: iol::master_dl::Event) {
-        DL_MODE_HANDLER_EVENT.send(event).await;
-    }
-
-    async fn await_dl_mode_handler_event_confirmation(&self) {
-        DL_MODE_HANDLER_EVENT2.receive().await.unwrap();
-        info!("confirmation received");
-    }
-}
 
 #[main]
 async fn main(spawner: Spawner) {
@@ -61,7 +25,7 @@ async fn main(spawner: Spawner) {
     let led = Output::new(peripherals.PA5, Level::High, Speed::Low);
 
     spawner.spawn(blink(led)).unwrap();
-    //spawner.spawn(run_statemachine()).unwrap();
+    // spawner.spawn(run_statemachine()).unwrap();
 
     // bind_interrupts!(struct Irqs {
     //     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
@@ -103,7 +67,7 @@ async fn main(spawner: Spawner) {
     // l6360.pins.enl_plus.set_high();
     // spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
 
-    let (mut dl, dl_mode_handler) = master_dl::DL::new(ActionsImpl, StateActionsImpl);
+    let (mut dl, dl_mode_handler) = master_dl::DL::new();
     spawner.spawn(run_dl(dl_mode_handler)).unwrap();
 
     Timer::after_millis(2_000).await;
@@ -115,7 +79,7 @@ async fn main(spawner: Spawner) {
 }
 
 #[task]
-async fn run_dl(mut dl: master_dl::StateMachine<StateActionsImpl>) {
+async fn run_dl(mut dl: master_dl::StateMachine<master_dl::StateActionsImpl>) {
     dl.run().await;
 }
 
