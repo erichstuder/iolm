@@ -23,7 +23,6 @@ if __name__ == "__main__":
             'cd examples/stm32f446re && cargo build && cd - &&'
             'cd examples/std && cargo build && cd -'
         )
-
     elif ex.arguments.test:
         commands = 'cargo test --manifest-path l6360/Cargo.toml'
     else:
