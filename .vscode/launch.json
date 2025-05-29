@@ -32,7 +32,7 @@
             "name": "std launch",
             "type": "lldb",
             "request": "launch",
-            "program": "examples/pc/target/debug/pc_example",
+            "program": "examples/std/target/debug/pc_example",
             "env": {
                 "RUST_LOG": "info"
             }
