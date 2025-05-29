@@ -92,27 +92,16 @@ impl<T: Actions + Copy> DL<T> {
         // self.pd_output_length = value_list.pd_output_length;
         // self.on_req_data_length_per_message = value_list.on_req_data_length_per_message;
 
-        // TODO: send state change request to statemachine and answer with Result => I dont like it => Remove
         let event = match mode {
             Mode::INACTIVE => master_dl_mode_handler::Event::DL_SetMode_INACTIVE,
             Mode::STARTUP => master_dl_mode_handler::Event::DL_SetMode_STARTUP,
-
-            //TODO: add more
-            _ => master_dl_mode_handler::Event::DL_SetMode_INACTIVE,
+            Mode::PREOPERATE => master_dl_mode_handler::Event::DL_SetMODE_PREOPERATE,
+            Mode::OPERATE => master_dl_mode_handler::Event::DL_SetMODE_OPERATE,
         };
 
-        // self.actions.send_dl_mode_handler_event(event).await;
-        // self.actions.await_dl_mode_handler_event_confirmation().await;
         DL_MODE_HANDLER_EVENT_CHANNEL.send(event).await;
+         // At the moment we just panic here on error. I don't know how to handle an error yet.
         DL_MODE_HANDLER_EVENT_RESULT_CHANNEL.receive().await.unwrap();
-
-        // if self.dl_mode_handler_state_machine.parse_event(event).await.is_ok() {
-        //     Ok(())
-        // }
-        // else {
-        //     Err(ErrorInfo::STATE_CONFLICT)
-        // }
-
         Ok(())
     }
 }

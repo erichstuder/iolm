@@ -36,7 +36,10 @@ pub enum Event {
     DL_SetMode_INACTIVE,
     #[allow(non_camel_case_types)]
     DL_SetMode_STARTUP,
-    //TODO: add more
+    #[allow(non_camel_case_types)]
+    DL_SetMODE_PREOPERATE,
+    #[allow(non_camel_case_types)]
+    DL_SetMODE_OPERATE,
 }
 
 #[derive(Debug, Copy, Clone)]
