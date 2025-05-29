@@ -15,7 +15,15 @@ use {defmt_rtt as _, panic_probe as _};
 
 //use l6360::{self, L6360};
 
-use iol::master_dl;
+use iol::master_dl::{self as dl, DL};
+
+#[derive(Copy, Clone)]
+struct DlActionsImpl;
+impl dl::Actions for DlActionsImpl {
+    async fn wait_ms(&self, duration: u64) {
+        Timer::after_millis(duration).await;
+    }
+}
 
 #[main]
 async fn main(spawner: Spawner) {
@@ -67,19 +75,19 @@ async fn main(spawner: Spawner) {
     // l6360.pins.enl_plus.set_high();
     // spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
 
-    let (mut dl, dl_mode_handler) = master_dl::DL::new();
-    spawner.spawn(run_dl(dl_mode_handler)).unwrap();
+    let (mut dl, dl_mode_handler_runner) = DL::new(DlActionsImpl);
+    spawner.spawn(run_dl(dl_mode_handler_runner)).unwrap();
 
     Timer::after_millis(2_000).await;
 
     info!("sending signal");
-    dl.DL_SetMode(master_dl::Mode::STARTUP).await.unwrap();
+    dl.DL_SetMode(dl::Mode::STARTUP).await.unwrap();
 
     Timer::after_millis(100_000).await;
 }
 
 #[task]
-async fn run_dl(mut dl: master_dl::StateMachine<master_dl::StateActionsImpl>) {
+async fn run_dl(mut dl: dl::DlModeHandlerStateMachine<DlActionsImpl>) {
     dl.run().await;
 }
 

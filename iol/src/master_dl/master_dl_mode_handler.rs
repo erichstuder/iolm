@@ -44,7 +44,7 @@ pub enum EventError {
     InvalidState(State, Event),
 }
 
-pub trait StateActions {
+pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn wait_ms(&self, duration: u64);
     #[allow(async_fn_in_trait)] //TODO: remove
@@ -53,23 +53,22 @@ pub trait StateActions {
     async fn confirm_event(&self, result: Result<(), EventError>);
 }
 
-pub struct StateMachine<T: StateActions> {
+pub struct StateMachine<T: Actions> {
     state: State,
     state_actions: T,
     //retry: u8,
 }
 
-impl<T: StateActions> StateMachine<T> {
+impl<T: Actions> StateMachine<T> {
     pub fn new(state_actions: T) -> Self {
-        StateMachine {
+        Self {
             state: State::Idle_0,
             state_actions,
             //retry: 0,
         }
     }
 
-    pub async fn run(&mut self) -> ! {
-        info!("run state machine dlllllllllll");
+    pub async fn run(&mut self) {
         loop {
             self.next().await;
         }

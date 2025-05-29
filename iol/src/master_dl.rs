@@ -5,15 +5,10 @@ use defmt::info;
 
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-// use embassy_time::Timer;
 
 mod master_dl_mode_handler;
+pub type DlModeHandlerStateMachine<T> = master_dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>>;
 
-// TODO: These pub use should not be done like this. It is then no longer clear where they belong to.
-pub use master_dl_mode_handler::StateActions;
-pub use master_dl_mode_handler::StateMachine;
-pub use master_dl_mode_handler::Event;
-pub use master_dl_mode_handler::EventError;
 
 pub enum Mode {
     INACTIVE,
@@ -40,46 +35,52 @@ pub enum ErrorInfo {
 
 pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn send_dl_mode_handler_event(&self, event: master_dl_mode_handler::Event);
-    #[allow(async_fn_in_trait)] //TODO: remove
-    async fn await_dl_mode_handler_event_confirmation(&self);
+    async fn wait_ms(&self, duration: u64);
 }
 
-static DL_MODE_HANDLER_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
-static DL_MODE_HANDLER_EVENT_RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
+static DL_MODE_HANDLER_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, master_dl_mode_handler::Event, 1> = Channel::new();
+static DL_MODE_HANDLER_EVENT_RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), master_dl_mode_handler::EventError>, 1> = Channel::new();
 
-// TODO: This should not be public struct
-pub struct StateActionsImpl;
-impl StateActions for StateActionsImpl {
+pub struct DlModeHandlerActionsImpl<T: Actions>{
+    pub actions: T,
+}
+
+impl<T: Actions> master_dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
     async fn wait_ms(&self, duration: u64) {
-        // TODO: implement
-        // Timer::after_millis(duration).await;
+        self.actions.wait_ms(duration).await;
     }
 
-    async fn await_event(&self) -> Event {
+    async fn await_event(&self) -> master_dl_mode_handler::Event {
         DL_MODE_HANDLER_EVENT_CHANNEL.receive().await
     }
 
-    async fn confirm_event(&self, result: Result<(), EventError>) {
+    async fn confirm_event(&self, result: Result<(), master_dl_mode_handler::EventError>) {
         DL_MODE_HANDLER_EVENT_RESULT_CHANNEL.send(result).await;
         info!("signalled");
     }
 }
 
-pub struct DL {
+pub struct DL<T> {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
     // pd_output_length: PDOutputLength,
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
+
+    _actions: T //unused at the moment, maybe later
 }
 
-impl DL {
-
-    pub fn new() -> (Self, master_dl_mode_handler::StateMachine<StateActionsImpl>) {
+impl<T: Actions + Copy> DL<T> {
+    pub fn new(actions: T) -> (Self, DlModeHandlerStateMachine<T>) {
         (
-            Self{},
-            master_dl_mode_handler::StateMachine::new(StateActionsImpl),
+            Self{
+                _actions: actions,
+            },
+            master_dl_mode_handler::StateMachine::new(
+                DlModeHandlerActionsImpl{
+                    actions,
+                }
+            ),
         )
     }
 
