@@ -1,8 +1,13 @@
-// use defmt::info;
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
+
+use embassy_sync::channel::Channel;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+// use embassy_time::Timer;
 
 mod master_dl_mode_handler;
-
-use core::marker::PhantomData;
 
 // TODO: These pub use should not be done like this. It is then no longer clear where they belong to.
 pub use master_dl_mode_handler::StateActions;
@@ -40,33 +45,43 @@ pub trait Actions {
     async fn await_dl_mode_handler_event_confirmation(&self);
 }
 
-pub struct DL<A: Actions, T: StateActions> {
+static DL_MODE_HANDLER_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
+static DL_MODE_HANDLER_EVENT_RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
+
+// TODO: This should not be public struct
+pub struct StateActionsImpl;
+impl StateActions for StateActionsImpl {
+    async fn wait_ms(&self, duration: u64) {
+        // TODO: implement
+        // Timer::after_millis(duration).await;
+    }
+
+    async fn await_event(&self) -> Event {
+        DL_MODE_HANDLER_EVENT_CHANNEL.receive().await
+    }
+
+    async fn confirm_event(&self, result: Result<(), EventError>) {
+        DL_MODE_HANDLER_EVENT_RESULT_CHANNEL.send(result).await;
+        info!("signalled");
+    }
+}
+
+pub struct DL {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
     // pd_output_length: PDOutputLength,
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
-
-    //dl_mode_handler_state_machine: master_dl_mode_handler::StateMachine<T>,
-    actions: A,
-    dummy: PhantomData<T>,
 }
 
-impl <A: Actions, T: StateActions> DL<A, T> {
+impl DL {
 
-    pub fn new(actions: A, state_actions: T) -> (Self, master_dl_mode_handler::StateMachine<T>) {
-        (Self{
-            //dl_mode_handler_state_machine: master_dl_mode_handler::StateMachine::new(state_actions),
-            actions,
-            dummy: PhantomData,
-        },
-            master_dl_mode_handler::StateMachine::new(state_actions),
+    pub fn new() -> (Self, master_dl_mode_handler::StateMachine<StateActionsImpl>) {
+        (
+            Self{},
+            master_dl_mode_handler::StateMachine::new(StateActionsImpl),
         )
     }
-
-    // pub async fn run(&mut self) {
-    //     self.dl_mode_handler_state_machine.run().await;
-    // }
 
     #[allow(non_snake_case)]
     pub async fn DL_SetMode(&mut self, mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
@@ -85,8 +100,10 @@ impl <A: Actions, T: StateActions> DL<A, T> {
             _ => master_dl_mode_handler::Event::DL_SetMode_INACTIVE,
         };
 
-        self.actions.send_dl_mode_handler_event(event).await;
-        self.actions.await_dl_mode_handler_event_confirmation().await;
+        // self.actions.send_dl_mode_handler_event(event).await;
+        // self.actions.await_dl_mode_handler_event_confirmation().await;
+        DL_MODE_HANDLER_EVENT_CHANNEL.send(event).await;
+        DL_MODE_HANDLER_EVENT_RESULT_CHANNEL.receive().await.unwrap();
 
         // if self.dl_mode_handler_state_machine.parse_event(event).await.is_ok() {
         //     Ok(())

@@ -9,7 +9,9 @@ master = []
 iols = []
 
 [dependencies]
-defmt = "=1.0.1"
+embassy-sync = "=0.7.0"
+defmt = { version = "=1.0.1", optional = true }
+log = { version = "=0.4.27", optional = true }
 
 # [dev-dependencies]
 # tokio = { version = "=1.45.1", features = ["macros", "rt-multi-thread"] }

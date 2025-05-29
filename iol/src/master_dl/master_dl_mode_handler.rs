@@ -1,3 +1,6 @@
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
 use defmt::info;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -88,8 +91,7 @@ impl<T: StateActions> StateMachine<T> {
             },
             State::EstablishCom_1 => {
                 self.state_actions.wait_ms(1000).await;
-            }
-            _ => {}
+            },
         }
     }
 }
