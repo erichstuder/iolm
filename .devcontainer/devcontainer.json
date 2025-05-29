@@ -26,6 +26,7 @@
                 "ms-azuretools.vscode-containers",
                 "ybaumes.highlight-trailing-white-spaces",
                 "probe-rs.probe-rs-debugger",
+                "vadimcn.vscode-lldb",
                 "ms-python.python"
             ]
         }
