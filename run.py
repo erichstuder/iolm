@@ -19,7 +19,11 @@ if __name__ == "__main__":
     ex = Executor(additional_arguments, description='Execute feature tests')
 
     if ex.arguments.build:
-        commands = 'cd examples/stm32f446re && cargo build'
+        commands = (
+            'cd examples/stm32f446re && cargo build && cd - &&'
+            'cd examples/std && cargo build && cd -'
+        )
+
     elif ex.arguments.test:
         commands = 'cargo test --manifest-path l6360/Cargo.toml'
     else:
