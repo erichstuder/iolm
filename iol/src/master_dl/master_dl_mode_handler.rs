@@ -1,8 +1,3 @@
-#[cfg(feature = "log")]
-use log::info;
-#[cfg(feature = "defmt")]
-use defmt::info;
-
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum State {
     #[allow(non_camel_case_types)]
@@ -25,9 +20,9 @@ pub enum State {
     // #[cfg(feature = "iols")]
     // #[allow(non_camel_case_types)]
     // WaitOnReadPulse_10,
-    // #[cfg(feature = "iols")]
-    // #[allow(non_camel_case_types)]
-    // WaitOnPortPowerOn_11,
+    #[cfg(feature = "iols")]
+    #[allow(non_camel_case_types)]
+    WaitOnPortPowerOn_11,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -47,6 +42,12 @@ pub enum EventError {
     InvalidState(State, Event),
 }
 
+enum Safety {
+    #[allow(dead_code)] //TODO: remove as soon as NonSafety is assigned
+    NonSafety,
+    SafetyCom,
+}
+
 pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn wait_ms(&self, duration: u64);
@@ -58,16 +59,18 @@ pub trait Actions {
 
 pub struct StateMachine<T: Actions> {
     state: State,
-    state_actions: T,
-    //retry: u8,
+    actions: T,
+    retry: u8,
+    safety: Safety,
 }
 
 impl<T: Actions> StateMachine<T> {
-    pub fn new(state_actions: T) -> Self {
+    pub fn new(actions: T) -> Self {
         Self {
             state: State::Idle_0,
-            state_actions,
-            //retry: 0,
+            actions,
+            retry: 0,
+            safety: Safety::SafetyCom //TODO: don't know yet where it will be set from.
         }
     }
 
@@ -80,20 +83,32 @@ impl<T: Actions> StateMachine<T> {
     async fn next(&mut self) {
         match self.state {
             State::Idle_0 => {
-                let event = self.state_actions.await_event().await;
-                if event == Event::DL_SetMode_STARTUP {
-                    self.state_actions.confirm_event(Ok(())).await;
+                let event = self.actions.await_event().await;
+                match event {
+                    Event::DL_SetMode_STARTUP => self.actions.confirm_event(Ok(())).await,
+                    _ => self.actions.confirm_event(Err(EventError::InvalidState(State::Idle_0, event))).await,
                 }
-                else {
-                    self.state_actions.confirm_event(Err(EventError::InvalidState(State::Idle_0, event))).await;
+                match self.safety {
+                    Safety::NonSafety => {
+                        self.retry = 0;
+                        self.state = State::EstablishCom_1;
+                    }
+                    #[cfg(feature = "iols")]
+                    Safety::SafetyCom => {
+                        // PortPowerOffOn(FSP_MinShutDownTime);
+                        self.state = State::WaitOnPortPowerOn_11;
+                    }
                 }
-
-                info!("enter State::EstablishCom_1");
-                self.state = State::EstablishCom_1;
             },
             State::EstablishCom_1 => {
-                self.state_actions.wait_ms(1000).await;
+                // TODO: implement
+                self.actions.wait_ms(1000).await;
             },
+            State::WaitOnPortPowerOn_11 => {
+                // TODO: implement
+                self.actions.wait_ms(1000).await;
+            }
+
         }
     }
 }

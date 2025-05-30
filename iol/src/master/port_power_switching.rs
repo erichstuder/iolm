@@ -1,86 +1,106 @@
-enum State {
+// see #11.8
+
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
+
+pub enum State {
+    #[allow(non_camel_case_types)]
     PowerOn_0,
+    #[allow(non_camel_case_types)]
     PowerOff_1,
 }
 
-enum Event {
+pub enum Event {
     PortPowerOn,
     PortPowerOff,
-    OneTimePowerOff,
+    OneTimePowerOff(u64),
+    // Note: It is more elegant if OffTimerElapsed is also an Event instead of a Guard.
+    OffTimerElapsed,
 }
 
 pub trait Actions {
-    // #[allow(async_fn_in_trait)] //TODO: remove
-    // async fn wait_ms(&self, duration: u64);
+    #[allow(async_fn_in_trait)] //TODO: remove
+    async fn port_power_on(&self);
+    #[allow(async_fn_in_trait)] //TODO: remove
+    async fn port_power_off(&self);
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn await_event(&self) -> Event;
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn confirm_event(&self, result: Result<(), EventError>);
+    async fn await_event_with_timeout_ms(&self, duration: u64) -> Event;
+    #[allow(async_fn_in_trait)] //TODO: remove
+    async fn confirm_event(&self);
 }
 
 pub struct StateMachine<T: Actions> {
     state: State,
     actions: T,
     off_timer_active: bool,
+    off_time: u64,
 }
 
-impl StateMachine {
-    pub fn new(actions: Actions) -> Self{
+impl<T: Actions> StateMachine<T> {
+    pub fn new(actions: T) -> Self{
         Self {
             state: State::PowerOn_0,
             actions,
             off_timer_active: false,
+            off_time: 0,
         }
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&mut self) {
         loop {
             self.next().await;
         }
     }
 
-    async fn next() {
-        match state {
+    async fn next(&mut self) {
+        match self.state {
             State::PowerOn_0 => {
-                match self.state_actions.await_event().await {
+                info!("entering PowerOn_0");
+                match self.actions.await_event().await {
                     Event::PortPowerOn => {
-                        self.actions.confirm_event(Ok(())).await;
+                        self.actions.confirm_event().await;
                     }
                     Event::PortPowerOff => {
-                        self.actions.confirm_event(Ok(())).await;
-                        //TODO: switch port power off
-                        self.state = State::PortPowerOff;
+                        self.actions.port_power_off().await;
+                        self.state = State::PowerOff_1;
+                        self.actions.confirm_event().await;
                     }
-                    Event::OneTimePowerOff => {
-                        self.actions.confirm_event(Ok(())).await;
-                        //TODO: switch port power off and start OffTimer with PowerOffTime
+                    Event::OneTimePowerOff(duration) => {
+                        self.actions.port_power_off().await;
                         self.off_timer_active = true;
-                        self.state = State::PortPowerOff;
+                        self.off_time = duration;
+                        self.state = State::PowerOff_1;
+                        self.actions.confirm_event().await;
                     }
+                    _ => panic!("This should never ever happen!")
                 }
             },
             State::PowerOff_1 => {
-                // TODO: wie wird das mit dem Timeout gelöst?
-                // siehe auch T7 Guard
+                info!("entering PowerOff_1");
                 let event = match self.off_timer_active {
-                    false => self.state_actions.await_event().await,
-                    true => self.state_actions.await_event_with_timeout().await,
+                    false => self.actions.await_event().await,
+                    true => self.actions.await_event_with_timeout_ms(self.off_time).await,
                 };
 
-                match Some(event) {
+                match event {
                     Event::PortPowerOff => {
-                        self.actions.confirm_event(Ok(())).await;
                         self.off_timer_active = false;
+                        self.actions.confirm_event().await;
                     }
-                    Event::OneTimePowerOff => {
-                        self.actions.confirm_event(Ok(())).await;
+                    Event::OneTimePowerOff(duration) => {
                         self.off_timer_active = true;
+                        self.off_time = duration;
+                        self.actions.confirm_event().await;
                     }
-                    Event::PortPowerOn => {
-                        self.actions.confirm_event(Ok(())).await;
-                        //TODO: switch port power on
+                    Event::PortPowerOn | Event::OffTimerElapsed  => {
+                        self.actions.port_power_on().await;
                         self.off_timer_active = false;
                         self.state = State::PowerOn_0;
+                        self.actions.confirm_event().await;
                     }
                 }
             }
