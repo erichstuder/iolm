@@ -55,6 +55,8 @@ pub trait Actions {
     async fn await_event(&self) -> Event;
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn confirm_event(&self, result: Result<(), EventError>);
+    #[allow(async_fn_in_trait)] //TODO: remove
+    async fn port_power_off_on_ms(&self, duration: u64);
 }
 
 pub struct StateMachine<T: Actions> {
@@ -62,6 +64,7 @@ pub struct StateMachine<T: Actions> {
     actions: T,
     retry: u8,
     safety: Safety,
+    min_shutdown_time_ms: u64,
 }
 
 impl<T: Actions> StateMachine<T> {
@@ -70,7 +73,8 @@ impl<T: Actions> StateMachine<T> {
             state: State::Idle_0,
             actions,
             retry: 0,
-            safety: Safety::SafetyCom //TODO: don't know yet where it will be set from.
+            safety: Safety::SafetyCom, //TODO: don't know yet where it will be set from.
+            min_shutdown_time_ms: 3000, //TODO: don't know yet where it will be set from.
         }
     }
 
@@ -95,7 +99,7 @@ impl<T: Actions> StateMachine<T> {
                     }
                     #[cfg(feature = "iols")]
                     Safety::SafetyCom => {
-                        // PortPowerOffOn(FSP_MinShutDownTime);
+                        self.actions.port_power_off_on_ms(self.min_shutdown_time_ms).await;
                         self.state = State::WaitOnPortPowerOn_11;
                     }
                 }

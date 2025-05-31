@@ -6,17 +6,21 @@ use defmt::info;
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-mod master_dl_mode_handler;
-pub type DlModeHandlerStateMachine<T> = master_dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>>;
+pub mod dl_mode_handler;
+pub type DlModeHandlerStateMachine<T> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>>;
 
 
 pub enum Mode {
+    #[allow(unused)] //TODO: remove
     INACTIVE,
     STARTUP,
+    #[allow(unused)] //TODO: remove
     PREOPERATE,
+    #[allow(unused)] //TODO: remove
     OPERATE,
 }
 
+#[allow(unused)] //TODO: remove
 pub struct ValueList {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
@@ -28,39 +32,47 @@ pub struct ValueList {
 #[derive(Debug)]
 pub enum ErrorInfo {
     #[allow(non_camel_case_types)]
+    #[allow(unused)] //TODO: remove
     STATE_CONFLICT,
     #[allow(non_camel_case_types)]
+    #[allow(unused)] //TODO: remove
     PARAMETER_CONFLICT,
 }
 
 pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn wait_ms(&self, duration: u64);
+    #[allow(async_fn_in_trait)] //TODO: remove
+    async fn port_power_off_on_ms(&self, duration: u64);
 }
 
-static DL_MODE_HANDLER_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, master_dl_mode_handler::Event, 1> = Channel::new();
-static DL_MODE_HANDLER_EVENT_RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), master_dl_mode_handler::EventError>, 1> = Channel::new();
+static DL_MODE_HANDLER_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, dl_mode_handler::Event, 1> = Channel::new();
+static DL_MODE_HANDLER_EVENT_RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), dl_mode_handler::EventError>, 1> = Channel::new();
 
 pub struct DlModeHandlerActionsImpl<T: Actions>{
     pub actions: T,
 }
 
-impl<T: Actions> master_dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
+impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
     async fn wait_ms(&self, duration: u64) {
         self.actions.wait_ms(duration).await;
     }
 
-    async fn await_event(&self) -> master_dl_mode_handler::Event {
+    async fn await_event(&self) -> dl_mode_handler::Event {
         DL_MODE_HANDLER_EVENT_CHANNEL.receive().await
     }
 
-    async fn confirm_event(&self, result: Result<(), master_dl_mode_handler::EventError>) {
+    async fn confirm_event(&self, result: Result<(), dl_mode_handler::EventError>) {
         DL_MODE_HANDLER_EVENT_RESULT_CHANNEL.send(result).await;
         info!("signalled");
     }
+
+    async fn port_power_off_on_ms(&self, duration: u64) {
+        self.actions.port_power_off_on_ms(duration).await;
+    }
 }
 
-pub struct DL<T> {
+pub struct DL<T: Actions> {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
@@ -76,7 +88,7 @@ impl<T: Actions + Copy> DL<T> {
             Self{
                 _actions: actions,
             },
-            master_dl_mode_handler::StateMachine::new(
+            dl_mode_handler::StateMachine::new(
                 DlModeHandlerActionsImpl{
                     actions,
                 }
@@ -93,10 +105,10 @@ impl<T: Actions + Copy> DL<T> {
         // self.on_req_data_length_per_message = value_list.on_req_data_length_per_message;
 
         let event = match mode {
-            Mode::INACTIVE => master_dl_mode_handler::Event::DL_SetMode_INACTIVE,
-            Mode::STARTUP => master_dl_mode_handler::Event::DL_SetMode_STARTUP,
-            Mode::PREOPERATE => master_dl_mode_handler::Event::DL_SetMODE_PREOPERATE,
-            Mode::OPERATE => master_dl_mode_handler::Event::DL_SetMODE_OPERATE,
+            Mode::INACTIVE => dl_mode_handler::Event::DL_SetMode_INACTIVE,
+            Mode::STARTUP => dl_mode_handler::Event::DL_SetMode_STARTUP,
+            Mode::PREOPERATE => dl_mode_handler::Event::DL_SetMODE_PREOPERATE,
+            Mode::OPERATE => dl_mode_handler::Event::DL_SetMODE_OPERATE,
         };
 
         DL_MODE_HANDLER_EVENT_CHANNEL.send(event).await;
