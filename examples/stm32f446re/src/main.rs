@@ -13,15 +13,29 @@ use embassy_time::Instant;
 use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
 
-//use l6360::{self, L6360};
-
-use iol::master_dl::{self as dl, DL};
+use l6360::{self, L6360};
+use iol::master;
 
 #[derive(Copy, Clone)]
-struct DlActionsImpl;
-impl dl::Actions for DlActionsImpl {
+struct MasterActions;
+impl master::Actions for MasterActions {
     async fn wait_ms(&self, duration: u64) {
-        Timer::after_millis(duration).await;
+        Timer::after_micros(duration).await;
+    }
+
+    async fn port_power_on(&self) {
+        info!("port power on (implement)");
+    }
+
+    async fn port_power_off(&self) {
+        info!("port power off (implement)");
+    }
+
+    async fn await_with_timeout_ms<F, T>(&self, future: F, duration: u64) -> Option<T>
+    where
+        F: core::future::Future<Output = T> + Send
+    {
+        embassy_time::with_timeout(embassy_time::Duration::from_millis(duration), future).await.ok()
     }
 }
 
@@ -75,19 +89,27 @@ async fn main(spawner: Spawner) {
     // l6360.pins.enl_plus.set_high();
     // spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
 
-    let (mut dl, dl_mode_handler_runner) = DL::new(DlActionsImpl);
-    spawner.spawn(run_dl(dl_mode_handler_runner)).unwrap();
+    let (mut master, port_power_switching, dl) = master::Master::new(MasterActions);
+    spawner.spawn(run_port_power_switching(port_power_switching)).unwrap();
+    spawner.spawn(run_dl(dl)).unwrap();
 
     Timer::after_millis(2_000).await;
 
-    info!("sending signal");
-    dl.DL_SetMode(dl::Mode::STARTUP).await.unwrap();
+    info!("startup");
+    master.dl_set_mode_startup().await;
 
     Timer::after_millis(100_000).await;
 }
 
 #[task]
-async fn run_dl(mut dl: dl::DlModeHandlerStateMachine<DlActionsImpl>) {
+async fn run_port_power_switching(mut port_power_switching: master::PortPowerSwitchingStateMachine<MasterActions>) {
+    info!("run port power switching");
+    port_power_switching.run().await;
+}
+
+#[task]
+async fn run_dl(mut dl: master::DlModeHandlerStateMachine<MasterActions>) {
+    info!("run dl");
     dl.run().await;
 }
 
