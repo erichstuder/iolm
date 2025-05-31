@@ -47,7 +47,6 @@ async fn main(spawner: Spawner) {
     let led = Output::new(peripherals.PA5, Level::High, Speed::Low);
 
     spawner.spawn(blink(led)).unwrap();
-    // spawner.spawn(run_statemachine()).unwrap();
 
     // bind_interrupts!(struct Irqs {
     //     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
@@ -144,19 +143,6 @@ async fn measure_ready_pulse(mut pin: ExtiInput<'static>) -> ! {
         info!("Pin was high for {} us", high_time_us);
     }
 }
-
-// #[task]
-// async fn run_statemachine() {
-//     struct StateActionsImpl;
-//     impl StateActions for StateActionsImpl {
-//         async fn wait_ms(&self, duration: u64) {
-//             Timer::after_millis(duration).await;
-//         }
-//     }
-
-//     let mut state_machine = StateMachine::new(&StateActionsImpl);
-//     state_machine.run().await;
-// }
 
 #[task]
 async fn blink(mut led: Output<'static>) -> ! {
