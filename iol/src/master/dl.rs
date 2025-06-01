@@ -5,6 +5,7 @@
 
 pub mod dl_mode_handler;
 pub type DlModeHandlerStateMachine<T> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>>;
+pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
 
 
 pub enum Mode {
@@ -44,9 +45,7 @@ pub trait Actions {
     async fn port_power_off_on_ms(&self, duration: u64);
 
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn await_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
-    where
-        F: core::future::Future<Output = T> + Send;
+    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
 }
 
 pub struct DlModeHandlerActionsImpl<T: Actions>{
@@ -62,11 +61,8 @@ impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
         self.actions.port_power_off_on_ms(duration).await;
     }
 
-    async fn await_event_with_timeout_ms(&self, duration: u64) -> dl_mode_handler::Event {
-        match self.actions.await_with_timeout_ms(duration, dl_mode_handler::EVENT_CHANNEL.receive()).await {
-            Some(event) => event,
-            None => dl_mode_handler::Event::TimeToReadyElapsed,
-        }
+    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult {
+        self.actions.await_ready_pulse_with_timeout_ms(duration).await
     }
 }
 

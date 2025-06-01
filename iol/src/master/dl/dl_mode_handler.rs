@@ -1,7 +1,7 @@
-// #[cfg(feature = "log")]
-// use log::info;
-// #[cfg(feature = "defmt")]
-// use defmt::info;
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
 
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -43,6 +43,9 @@ pub enum Event {
     DL_SetMODE_PREOPERATE,
     #[allow(non_camel_case_types)]
     DL_SetMODE_OPERATE,
+}
+
+pub enum ReadyPulseResult {
     ReadyPulseOk,
     // Note: It is more elegant if TimeToReadyElapsed is also an Event instead of a Guard.
     TimeToReadyElapsed,
@@ -66,7 +69,7 @@ pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn wait_ms(&self, duration: u64);
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn await_event_with_timeout_ms(&self, duration: u64) -> Event;
+    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn port_power_off_on_ms(&self, duration: u64);
 }
@@ -97,7 +100,7 @@ impl<T: Actions> StateMachine<T> {
             #[cfg(feature = "iols")]
             min_shutdown_time_ms: 3000, //TODO: don't know yet where it will be set from.
             #[cfg(feature = "iols")]
-            time_to_ready_ms: 1000, //TODO: don't know yet where it will be set from
+            time_to_ready_ms: 5000, //TODO: don't know yet where it will be set from
         }
     }
 
@@ -133,27 +136,35 @@ impl<T: Actions> StateMachine<T> {
                 self.state = State::EstablishCom_1;
             },
             State::EstablishCom_1 => {
-                // TODO: implement
-                self.actions.wait_ms(1000).await;
+                info!("EstablishCom_1");
+                self.actions.wait_ms(3000).await;
             },
             #[cfg(feature = "iols")]
             State::WaitOnPortPowerOn_11 => {
+                info!("WaitOnPortPowerOn_11");
                 self.actions.port_power_off_on_ms(self.min_shutdown_time_ms).await;
                 self.state = State::WaitOnReadyPulse_10;
+                info!("done");
             },
             #[cfg(feature = "iols")]
             State::WaitOnReadyPulse_10 => {
-                match self.actions.await_event_with_timeout_ms(self.time_to_ready_ms).await {
-                    Event::ReadyPulseOk => {
+                info!("WaitOnReadyPulse_10");
+                match self.actions.await_ready_pulse_with_timeout_ms(self.time_to_ready_ms).await {
+                    ReadyPulseResult::ReadyPulseOk => {
+                        info!("ReadyPulseOk");
                         // Note:
                         // Strangely the specification wants to enter this state on DL_SetMode_STARTUP.
                         // To me this makes no sense. Or is there some magic I don't understand yet?
                         self.retry = 0;
                         self.state = State::EstablishCom_1;
                     },
-                    Event::TimeToReadyElapsed => self.state = State::Idle_0,
-                    _ => panic!("This should never ever happen!")
+                    ReadyPulseResult::TimeToReadyElapsed => {
+                        info!("TimeToReadyElapsed");
+                        self.state = State::Idle_0;
+                    }
                 }
+
+                self.actions.wait_ms(1000).await; //TODO:remove
             },
         }
     }

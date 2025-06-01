@@ -84,7 +84,7 @@ impl<T: Actions> StateMachine<T> {
                         self.off_timer_active = true;
                         self.off_time = duration;
                         self.state = State::PowerOff_1;
-                        self.confirm_event().await;
+                        // Note: No event confirmation here. We confirm as soon as the OneTimerPowerOff is finished.
                     }
                     _ => panic!("This should never ever happen!")
                 }

@@ -1,11 +1,17 @@
 // see #11
 
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
+
 mod port_power_switching;
 pub type PortPowerSwitchingStateMachine<T> = port_power_switching::StateMachine<PortPowerSwitchingActions<T>>;
 
 mod dl;
 use dl::DL;
 pub type DlModeHandlerStateMachine<T> = dl::DlModeHandlerStateMachine<DlActions<T>>;
+pub use dl::ReadyPulseResult as ReadyPulseResult;
 
 pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
@@ -18,9 +24,12 @@ pub trait Actions {
     async fn port_power_off(&self);
 
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn await_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
+    async fn await_event_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
     where
         F: core::future::Future<Output = T> + Send;
+
+    #[allow(async_fn_in_trait)] //TODO: remove
+    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
 }
 
 pub struct PortPowerSwitchingActions<T: Actions> {
@@ -37,7 +46,7 @@ impl<T: Actions> port_power_switching::Actions for PortPowerSwitchingActions<T> 
     }
 
     async fn await_event_with_timeout_ms(&self, duration: u64) -> port_power_switching::Event {
-        match self.actions.await_with_timeout_ms(duration, port_power_switching::EVENT_CHANNEL.receive()).await {
+        match self.actions.await_event_with_timeout_ms(duration, port_power_switching::EVENT_CHANNEL.receive()).await {
             Some(event) => event,
             None => port_power_switching::Event::OffTimerElapsed,
         }
@@ -55,15 +64,14 @@ impl<T: Actions> dl::Actions for DlActions<T> {
     }
 
     async fn port_power_off_on_ms(&self, duration: u64) {
+        info!("port power off on");
         port_power_switching::EVENT_CHANNEL.send(port_power_switching::Event::OneTimePowerOff(duration)).await;
         port_power_switching::RESULT_CHANNEL.receive().await;
+        info!("port power off on: done");
     }
 
-    async fn await_with_timeout_ms<F, A>(&self, duration: u64, future: F) -> Option<A>
-    where
-        F: core::future::Future<Output = A> + Send
-    {
-        self.actions.await_with_timeout_ms(duration, future).await
+    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult {
+        self.actions.await_ready_pulse_with_timeout_ms(duration).await
     }
 }
 

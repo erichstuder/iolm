@@ -33,7 +33,7 @@ impl master::Actions for MasterActions {
         info!("port power off");
     }
 
-    async fn await_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
+    async fn await_event_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
     where
         F: Future<Output = T>,
     {
@@ -41,6 +41,10 @@ impl master::Actions for MasterActions {
         let result = timeout(Duration::from_millis(duration), future).await.ok();
         info!("timeout");
         result
+    }
+
+    async fn await_ready_pulse_with_timeout_ms(&self, _duration: u64) -> master::ReadyPulseResult {
+        master::ReadyPulseResult::ReadyPulseOk
     }
 }
 
