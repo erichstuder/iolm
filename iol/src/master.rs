@@ -1,8 +1,5 @@
 // see #11
 
-use embassy_sync::channel::Channel;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
 mod port_power_switching;
 pub type PortPowerSwitchingStateMachine<T> = port_power_switching::StateMachine<PortPowerSwitchingActions<T>>;
 
@@ -21,13 +18,10 @@ pub trait Actions {
     async fn port_power_off(&self);
 
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn await_with_timeout_ms<F, T>(&self, future: F, duration: u64) -> Option<T>
+    async fn await_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
     where
         F: core::future::Future<Output = T> + Send;
 }
-
-static PORT_POWER_SWITCHING_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, port_power_switching::Event, 1> = Channel::new();
-static PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL: Channel<CriticalSectionRawMutex, (), 1> = Channel::new();
 
 pub struct PortPowerSwitchingActions<T: Actions> {
     actions: T
@@ -42,22 +36,11 @@ impl<T: Actions> port_power_switching::Actions for PortPowerSwitchingActions<T> 
         self.actions.port_power_off().await;
     }
 
-    async fn await_event(&self) -> port_power_switching::Event {
-        PORT_POWER_SWITCHING_EVENT_CHANNEL.receive().await
-    }
-
     async fn await_event_with_timeout_ms(&self, duration: u64) -> port_power_switching::Event {
-        match self.actions.await_with_timeout_ms(
-            PORT_POWER_SWITCHING_EVENT_CHANNEL.receive(),
-            duration,
-        ).await {
+        match self.actions.await_with_timeout_ms(duration, port_power_switching::EVENT_CHANNEL.receive()).await {
             Some(event) => event,
             None => port_power_switching::Event::OffTimerElapsed,
         }
-    }
-
-    async fn confirm_event(&self) {
-        PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.send(()).await
     }
 }
 
@@ -70,9 +53,17 @@ impl<T: Actions> dl::Actions for DlActions<T> {
     async fn wait_ms(&self, duration: u64) {
         self.actions.wait_ms(duration).await;
     }
+
     async fn port_power_off_on_ms(&self, duration: u64) {
-        PORT_POWER_SWITCHING_EVENT_CHANNEL.send(port_power_switching::Event::OneTimePowerOff(duration)).await;
-        PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
+        port_power_switching::EVENT_CHANNEL.send(port_power_switching::Event::OneTimePowerOff(duration)).await;
+        port_power_switching::RESULT_CHANNEL.receive().await;
+    }
+
+    async fn await_with_timeout_ms<F, A>(&self, duration: u64, future: F) -> Option<A>
+    where
+        F: core::future::Future<Output = A> + Send
+    {
+        self.actions.await_with_timeout_ms(duration, future).await
     }
 }
 

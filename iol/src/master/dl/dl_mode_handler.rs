@@ -1,3 +1,11 @@
+// #[cfg(feature = "log")]
+// use log::info;
+// #[cfg(feature = "defmt")]
+// use defmt::info;
+
+use embassy_sync::channel::Channel;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum State {
     #[allow(non_camel_case_types)]
@@ -17,9 +25,9 @@ pub enum State {
     // ComRequestCOM1_8,
     // #[allow(non_camel_case_types)]
     // Retry_9,
-    // #[cfg(feature = "iols")]
-    // #[allow(non_camel_case_types)]
-    // WaitOnReadPulse_10,
+    #[cfg(feature = "iols")]
+    #[allow(non_camel_case_types)]
+    WaitOnReadyPulse_10,
     #[cfg(feature = "iols")]
     #[allow(non_camel_case_types)]
     WaitOnPortPowerOn_11,
@@ -35,13 +43,19 @@ pub enum Event {
     DL_SetMODE_PREOPERATE,
     #[allow(non_camel_case_types)]
     DL_SetMODE_OPERATE,
+    ReadyPulseOk,
+    // Note: It is more elegant if TimeToReadyElapsed is also an Event instead of a Guard.
+    TimeToReadyElapsed,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum EventError {
+    #[allow(unused)] //TODO: remove
     InvalidState(State, Event),
 }
 
+#[cfg(feature = "iols")]
+#[derive(PartialEq)]
 enum Safety {
     #[allow(dead_code)] //TODO: remove as soon as NonSafety is assigned
     NonSafety,
@@ -52,12 +66,13 @@ pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn wait_ms(&self, duration: u64);
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn await_event(&self) -> Event;
-    #[allow(async_fn_in_trait)] //TODO: remove
-    async fn confirm_event(&self, result: Result<(), EventError>);
+    async fn await_event_with_timeout_ms(&self, duration: u64) -> Event;
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn port_power_off_on_ms(&self, duration: u64);
 }
+
+pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
+pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
 
 pub struct StateMachine<T: Actions> {
     state: State,
@@ -67,6 +82,8 @@ pub struct StateMachine<T: Actions> {
     safety: Safety,
     #[cfg(feature = "iols")]
     min_shutdown_time_ms: u64,
+    #[cfg(feature = "iols")]
+    time_to_ready_ms: u64,
 }
 
 impl<T: Actions> StateMachine<T> {
@@ -79,6 +96,8 @@ impl<T: Actions> StateMachine<T> {
             safety: Safety::SafetyCom, //TODO: don't know yet where it will be set from.
             #[cfg(feature = "iols")]
             min_shutdown_time_ms: 3000, //TODO: don't know yet where it will be set from.
+            #[cfg(feature = "iols")]
+            time_to_ready_ms: 1000, //TODO: don't know yet where it will be set from
         }
     }
 
@@ -88,42 +107,54 @@ impl<T: Actions> StateMachine<T> {
         }
     }
 
+    async fn await_event(&self) -> Event {
+        EVENT_CHANNEL.receive().await
+    }
+
+    async fn confirm_event(&self, result: Result<(), EventError>) {
+        RESULT_CHANNEL.send(result).await;
+    }
+
     async fn next(&mut self) {
         match self.state {
             State::Idle_0 => {
-                let event = self.actions.await_event().await;
+                let event = self.await_event().await;
                 match event {
-                    Event::DL_SetMode_STARTUP => self.actions.confirm_event(Ok(())).await,
-                    _ => self.actions.confirm_event(Err(EventError::InvalidState(State::Idle_0, event))).await,
+                    Event::DL_SetMode_STARTUP => self.confirm_event(Ok(())).await,
+                    _ => self.confirm_event(Err(EventError::InvalidState(State::Idle_0, event))).await,
                 }
 
-                let establish_com = |this: &mut Self| {
-                    this.retry = 0;
-                    this.state = State::EstablishCom_1;
-                };
-
-                #[cfg(not(feature = "iols"))]
-                establish_com(self);
                 #[cfg(feature = "iols")]
-                match self.safety {
-                    Safety::NonSafety => {
-                        establish_com(self);
-                    }
-                    Safety::SafetyCom => {
-                        self.actions.port_power_off_on_ms(self.min_shutdown_time_ms).await;
-                        self.state = State::WaitOnPortPowerOn_11;
-                    }
+                if self.safety == Safety::SafetyCom {
+                    self.state = State::WaitOnPortPowerOn_11;
+                    return;
                 }
+                self.retry = 0;
+                self.state = State::EstablishCom_1;
             },
             State::EstablishCom_1 => {
                 // TODO: implement
                 self.actions.wait_ms(1000).await;
             },
+            #[cfg(feature = "iols")]
             State::WaitOnPortPowerOn_11 => {
-                // TODO: implement
-                self.actions.wait_ms(1000).await;
-            }
-
+                self.actions.port_power_off_on_ms(self.min_shutdown_time_ms).await;
+                self.state = State::WaitOnReadyPulse_10;
+            },
+            #[cfg(feature = "iols")]
+            State::WaitOnReadyPulse_10 => {
+                match self.actions.await_event_with_timeout_ms(self.time_to_ready_ms).await {
+                    Event::ReadyPulseOk => {
+                        // Note:
+                        // Strangely the specification wants to enter this state on DL_SetMode_STARTUP.
+                        // To me this makes no sense. Or is there some magic I don't understand yet?
+                        self.retry = 0;
+                        self.state = State::EstablishCom_1;
+                    },
+                    Event::TimeToReadyElapsed => self.state = State::Idle_0,
+                    _ => panic!("This should never ever happen!")
+                }
+            },
         }
     }
 }

@@ -1,10 +1,7 @@
-#[cfg(feature = "log")]
-use log::info;
-#[cfg(feature = "defmt")]
-use defmt::info;
-
-use embassy_sync::channel::Channel;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+// #[cfg(feature = "log")]
+// use log::info;
+// #[cfg(feature = "defmt")]
+// use defmt::info;
 
 pub mod dl_mode_handler;
 pub type DlModeHandlerStateMachine<T> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>>;
@@ -42,12 +39,15 @@ pub enum ErrorInfo {
 pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn wait_ms(&self, duration: u64);
+
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn port_power_off_on_ms(&self, duration: u64);
-}
 
-static DL_MODE_HANDLER_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, dl_mode_handler::Event, 1> = Channel::new();
-static DL_MODE_HANDLER_EVENT_RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), dl_mode_handler::EventError>, 1> = Channel::new();
+    #[allow(async_fn_in_trait)] //TODO: remove
+    async fn await_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
+    where
+        F: core::future::Future<Output = T> + Send;
+}
 
 pub struct DlModeHandlerActionsImpl<T: Actions>{
     pub actions: T,
@@ -58,17 +58,15 @@ impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
         self.actions.wait_ms(duration).await;
     }
 
-    async fn await_event(&self) -> dl_mode_handler::Event {
-        DL_MODE_HANDLER_EVENT_CHANNEL.receive().await
-    }
-
-    async fn confirm_event(&self, result: Result<(), dl_mode_handler::EventError>) {
-        DL_MODE_HANDLER_EVENT_RESULT_CHANNEL.send(result).await;
-        info!("signalled");
-    }
-
     async fn port_power_off_on_ms(&self, duration: u64) {
         self.actions.port_power_off_on_ms(duration).await;
+    }
+
+    async fn await_event_with_timeout_ms(&self, duration: u64) -> dl_mode_handler::Event {
+        match self.actions.await_with_timeout_ms(duration, dl_mode_handler::EVENT_CHANNEL.receive()).await {
+            Some(event) => event,
+            None => dl_mode_handler::Event::TimeToReadyElapsed,
+        }
     }
 }
 
@@ -111,9 +109,9 @@ impl<T: Actions + Copy> DL<T> {
             Mode::OPERATE => dl_mode_handler::Event::DL_SetMODE_OPERATE,
         };
 
-        DL_MODE_HANDLER_EVENT_CHANNEL.send(event).await;
-         // At the moment we just panic here on error. I don't know how to handle an error yet.
-        DL_MODE_HANDLER_EVENT_RESULT_CHANNEL.receive().await.unwrap();
+        dl_mode_handler::EVENT_CHANNEL.send(event).await;
+         // At the moment we just panic here on error. I don't know how to handle this error yet.
+        dl_mode_handler::RESULT_CHANNEL.receive().await.unwrap();
         Ok(())
     }
 }

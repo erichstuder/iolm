@@ -46,7 +46,7 @@ impl master::Actions for MasterActions {
         info!("done");
     }
 
-    async fn await_with_timeout_ms<F, T>(&self, future: F, duration: u64) -> Option<T>
+    async fn await_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
     where
         F: core::future::Future<Output = T> + Send
     {

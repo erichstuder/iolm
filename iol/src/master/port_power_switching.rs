@@ -5,6 +5,9 @@ use log::info;
 #[cfg(feature = "defmt")]
 use defmt::info;
 
+use embassy_sync::channel::Channel;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
 pub enum State {
     #[allow(non_camel_case_types)]
     PowerOn_0,
@@ -26,12 +29,11 @@ pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn port_power_off(&self);
     #[allow(async_fn_in_trait)] //TODO: remove
-    async fn await_event(&self) -> Event;
-    #[allow(async_fn_in_trait)] //TODO: remove
     async fn await_event_with_timeout_ms(&self, duration: u64) -> Event;
-    #[allow(async_fn_in_trait)] //TODO: remove
-    async fn confirm_event(&self);
 }
+
+pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
+pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, (), 1> = Channel::new();
 
 pub struct StateMachine<T: Actions> {
     state: State,
@@ -56,25 +58,33 @@ impl<T: Actions> StateMachine<T> {
         }
     }
 
+    async fn await_event(&self) -> Event {
+        EVENT_CHANNEL.receive().await
+    }
+
+    async fn confirm_event(&self) {
+        RESULT_CHANNEL.send(()).await;
+    }
+
     async fn next(&mut self) {
         match self.state {
             State::PowerOn_0 => {
                 info!("entering PowerOn_0");
-                match self.actions.await_event().await {
+                match self.await_event().await {
                     Event::PortPowerOn => {
-                        self.actions.confirm_event().await;
+                        self.confirm_event().await;
                     }
                     Event::PortPowerOff => {
                         self.actions.port_power_off().await;
                         self.state = State::PowerOff_1;
-                        self.actions.confirm_event().await;
+                        self.confirm_event().await;
                     }
                     Event::OneTimePowerOff(duration) => {
                         self.actions.port_power_off().await;
                         self.off_timer_active = true;
                         self.off_time = duration;
                         self.state = State::PowerOff_1;
-                        self.actions.confirm_event().await;
+                        self.confirm_event().await;
                     }
                     _ => panic!("This should never ever happen!")
                 }
@@ -82,25 +92,25 @@ impl<T: Actions> StateMachine<T> {
             State::PowerOff_1 => {
                 info!("entering PowerOff_1");
                 let event = match self.off_timer_active {
-                    false => self.actions.await_event().await,
+                    false => self.await_event().await,
                     true => self.actions.await_event_with_timeout_ms(self.off_time).await,
                 };
 
                 match event {
                     Event::PortPowerOff => {
                         self.off_timer_active = false;
-                        self.actions.confirm_event().await;
+                        self.confirm_event().await;
                     }
                     Event::OneTimePowerOff(duration) => {
                         self.off_timer_active = true;
                         self.off_time = duration;
-                        self.actions.confirm_event().await;
+                        self.confirm_event().await;
                     }
                     Event::PortPowerOn | Event::OffTimerElapsed  => {
                         self.actions.port_power_on().await;
                         self.off_timer_active = false;
                         self.state = State::PowerOn_0;
-                        self.actions.confirm_event().await;
+                        self.confirm_event().await;
                     }
                 }
             }
