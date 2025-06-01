@@ -63,7 +63,9 @@ pub struct StateMachine<T: Actions> {
     state: State,
     actions: T,
     retry: u8,
+    #[cfg(feature = "iols")]
     safety: Safety,
+    #[cfg(feature = "iols")]
     min_shutdown_time_ms: u64,
 }
 
@@ -73,7 +75,9 @@ impl<T: Actions> StateMachine<T> {
             state: State::Idle_0,
             actions,
             retry: 0,
+            #[cfg(feature = "iols")]
             safety: Safety::SafetyCom, //TODO: don't know yet where it will be set from.
+            #[cfg(feature = "iols")]
             min_shutdown_time_ms: 3000, //TODO: don't know yet where it will be set from.
         }
     }
@@ -92,12 +96,19 @@ impl<T: Actions> StateMachine<T> {
                     Event::DL_SetMode_STARTUP => self.actions.confirm_event(Ok(())).await,
                     _ => self.actions.confirm_event(Err(EventError::InvalidState(State::Idle_0, event))).await,
                 }
+
+                let establish_com = |this: &mut Self| {
+                    this.retry = 0;
+                    this.state = State::EstablishCom_1;
+                };
+
+                #[cfg(not(feature = "iols"))]
+                establish_com(self);
+                #[cfg(feature = "iols")]
                 match self.safety {
                     Safety::NonSafety => {
-                        self.retry = 0;
-                        self.state = State::EstablishCom_1;
+                        establish_com(self);
                     }
-                    #[cfg(feature = "iols")]
                     Safety::SafetyCom => {
                         self.actions.port_power_off_on_ms(self.min_shutdown_time_ms).await;
                         self.state = State::WaitOnPortPowerOn_11;
