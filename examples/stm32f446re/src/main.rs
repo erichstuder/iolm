@@ -97,10 +97,9 @@ async fn main(spawner: Spawner) {
     };
 
     *L6360.lock().await = Some(L6360::new(i2c, 0b1100_000, pins, config).unwrap());
+
     let mut l6360_ref = L6360.lock().await;
     let l6360 = l6360_ref.as_mut().unwrap();
-
-    // let mut l6360 = L6360::new(i2c, 0b1100_000, pins, config).unwrap();
     l6360.init().await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
