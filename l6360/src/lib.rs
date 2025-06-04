@@ -179,12 +179,26 @@ mod tests {
         }
     }
 
+    mock! {
+        pub InputPinType {}
+
+        impl digital::ErrorType for InputPinType {
+            type Error = core::convert::Infallible;
+        }
+
+        impl InputPin for InputPinType {
+            fn is_high(&mut self) -> Result<bool, <Self as digital::ErrorType>::Error>;
+            fn is_low(&mut self) -> Result<bool, <Self as digital::ErrorType>::Error>;
+        }
+    }
+
     #[tokio::test]
     async fn test_new() {
         for address in 0..=255 {
             let mock_i2c = MockI2c::new();
             let pins = Pins {
                 enl_plus: MockOutputPinType::new(),
+                out_cq: MockInputPinType::new(),
             };
             let config = Config::default();
             let result = L6360::new(mock_i2c, address, pins, config);
@@ -210,6 +224,7 @@ mod tests {
             let i2c_address = 0b0_1100_111;
             let pins = Pins {
                 enl_plus: MockOutputPinType::new(),
+                out_cq: MockInputPinType::new(),
             };
             let config = Config {
                 control_register_1: ControlRegister1 {
@@ -256,6 +271,7 @@ mod tests {
             let mut i2c_mock = MockI2c::new();
             let pins = Pins {
                 enl_plus: MockOutputPinType::new(),
+                out_cq: MockInputPinType::new(),
             };
 
             i2c_mock
@@ -312,7 +328,7 @@ mod tests {
         println!("|:----------:|:--------:|");
         for (data, expected) in test_cases {
             println!("| 0b{:08b} |   0b{:03b}  |", data, expected);
-            assert_eq!(L6360::<MockI2c, MockOutputPinType>::calculate_parity(*data), *expected);
+            assert_eq!(L6360::<MockI2c, MockOutputPinType, MockInputPinType>::calculate_parity(*data), *expected);
         }
     }
 }
