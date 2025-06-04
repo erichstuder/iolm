@@ -24,7 +24,12 @@ if __name__ == "__main__":
             'cd examples/std && cargo build && cd -'
         )
     elif ex.arguments.test:
-        commands = 'cargo test --manifest-path l6360/Cargo.toml'
+        commands = (
+            'cargo test --manifest-path l6360/Cargo.toml &&'
+            # Note: log feature is not specifically tested and always enabled so it compiles.
+            'cargo test --manifest-path iol/Cargo.toml --features "log master" &&'
+            'cargo test --manifest-path iol/Cargo.toml --features "log master iols"'
+        )
     else:
         commands = None
 
