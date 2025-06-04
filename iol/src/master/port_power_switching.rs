@@ -5,9 +5,13 @@ use log::info;
 #[cfg(feature = "defmt")]
 use defmt::info;
 
+#[cfg(test)]
+use mockall::automock;
+
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
+#[derive(Debug, PartialEq)]
 pub enum State {
     #[allow(non_camel_case_types)]
     PowerOn_0,
@@ -23,6 +27,7 @@ pub enum Event {
     OffTimerElapsed,
 }
 
+#[cfg_attr(test, automock)]
 pub trait Actions {
     #[allow(async_fn_in_trait)] //TODO: remove
     async fn port_power_on(&self);
@@ -115,5 +120,216 @@ impl<T: Actions> StateMachine<T> {
                 }
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio;
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn PowerOn_0_state_PortPowerOn_event() {
+        let mut sm = StateMachine::new(MockActions::new());
+        assert_eq!(sm.state, State::PowerOn_0);
+        EVENT_CHANNEL.send(Event::PortPowerOn).await;
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.state, State::PowerOn_0);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn PowerOn_0_state_PortPowerOff_event() {
+        let mut sm = StateMachine::new(MockActions::new());
+        assert_eq!(sm.state, State::PowerOn_0);
+        EVENT_CHANNEL.send(Event::PortPowerOff).await;
+        sm.actions.expect_port_power_off()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.state, State::PowerOff_1);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn PowerOn_0_state_OneTimerPowerOff_event() {
+        let mut sm = StateMachine::new(MockActions::new());
+        assert_eq!(sm.state, State::PowerOn_0);
+        EVENT_CHANNEL.send(Event::OneTimePowerOff(0)).await;
+        sm.actions.expect_port_power_off()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        // assert_eq!(RESULT_CHANNEL.receive().await, ()); No immediate confirmation
+        assert_eq!(sm.state, State::PowerOff_1);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn panic_in_PowerOn_0() {
+        let mut sm = StateMachine::new(MockActions::new());
+        assert_eq!(sm.state, State::PowerOn_0);
+
+        EVENT_CHANNEL.send(Event::OffTimerElapsed).await;
+        let handle = tokio::spawn(async move {
+            sm.next().await;
+        });
+        let result = handle.await;
+        assert!(result.is_err());
+    }
+
+    #[allow(non_snake_case)]
+    async fn go_to_PowerOff_1(sm: &mut StateMachine<MockActions>) {
+        EVENT_CHANNEL.send(Event::PortPowerOff).await;
+        sm.actions.expect_port_power_off()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.state, State::PowerOff_1);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn PowerOff_1_state_PortPowerOff_event() {
+        let mut sm = StateMachine::new(MockActions::new());
+        go_to_PowerOff_1(&mut sm).await;
+        EVENT_CHANNEL.send(Event::PortPowerOff).await;
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.state, State::PowerOff_1);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn PowerOff_1_state_OneTimePowerOff_event() {
+        let mut sm = StateMachine::new(MockActions::new());
+        go_to_PowerOff_1(&mut sm).await;
+        EVENT_CHANNEL.send(Event::OneTimePowerOff(42)).await;
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.state, State::PowerOff_1);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn PowerOff_1_state_PowerOn_event() {
+        let mut sm = StateMachine::new(MockActions::new());
+        go_to_PowerOff_1(&mut sm).await;
+        EVENT_CHANNEL.send(Event::PortPowerOn).await;
+        sm.actions.expect_port_power_on()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.state, State::PowerOn_0);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn PowerOff_1_state_OffTimerElapsed_event() {
+        let mut sm = StateMachine::new(MockActions::new());
+        go_to_PowerOff_1(&mut sm).await;
+        EVENT_CHANNEL.send(Event::OffTimerElapsed).await;
+        sm.actions.expect_port_power_on()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.state, State::PowerOn_0);
+    }
+
+    #[allow(non_snake_case)]
+    async fn start_OneTimePowerOff() -> (StateMachine<MockActions>, u64) {
+        let mut sm = StateMachine::new(MockActions::new());
+        assert_eq!(sm.off_timer_active, false);
+        assert_eq!(sm.off_time, 0);
+
+        let off_time = 222 as u64;
+        EVENT_CHANNEL.send(Event::OneTimePowerOff(off_time)).await;
+        sm.actions.expect_port_power_off()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        assert_eq!(sm.off_timer_active, true);
+        assert_eq!(sm.off_time, off_time);
+        assert_eq!(sm.state, State::PowerOff_1);
+        (sm, off_time)
+
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn OneTimePowerOff_aborted_with_PortPowerOff() {
+        let (mut sm, off_time) = start_OneTimePowerOff().await;
+
+        sm.actions.expect_await_event_with_timeout_ms()
+            .times(1)
+            .withf(move |duration| *duration == off_time)
+            .returning(|_| Event::PortPowerOff);
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.off_timer_active, false);
+        assert_eq!(sm.off_time, off_time);
+        assert_eq!(sm.state, State::PowerOff_1);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn OneTimePowerOff_aborted_with_OneTimePowerOff() {
+        let (mut sm, off_time) = start_OneTimePowerOff().await;
+
+        let off_time_2 = 16 as u64;
+        sm.actions.expect_await_event_with_timeout_ms()
+            .times(1)
+            .withf(move |duration| *duration == off_time)
+            .returning(move |_| Event::OneTimePowerOff(off_time_2));
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.off_timer_active, true);
+        assert_eq!(sm.off_time, off_time_2);
+        assert_eq!(sm.state, State::PowerOff_1);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn OneTimePowerOff_aborted_with_PortPowerOn() {
+        let (mut sm, off_time) = start_OneTimePowerOff().await;
+
+        sm.actions.expect_await_event_with_timeout_ms()
+            .times(1)
+            .withf(move |duration| *duration == off_time)
+            .returning(|_| Event::PortPowerOn);
+        sm.actions.expect_port_power_on()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.off_timer_active, false);
+        assert_eq!(sm.off_time, off_time);
+        assert_eq!(sm.state, State::PowerOn_0);
+    }
+
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn OneTimePowerOff_success() {
+        let (mut sm, off_time) = start_OneTimePowerOff().await;
+
+        sm.actions.expect_await_event_with_timeout_ms()
+            .times(1)
+            .withf(move |duration| *duration == off_time)
+            .returning(|_| Event::OffTimerElapsed);
+        sm.actions.expect_port_power_on()
+            .times(1)
+            .returning(|| ());
+        sm.next().await;
+        assert_eq!(RESULT_CHANNEL.receive().await, ());
+        assert_eq!(sm.off_timer_active, false);
+        assert_eq!(sm.off_time, off_time);
+        assert_eq!(sm.state, State::PowerOn_0);
     }
 }
