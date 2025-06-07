@@ -40,13 +40,13 @@ pub enum ErrorInfo {
 }
 
 pub trait Actions {
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn wait_ms(&self, duration: u64);
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn port_power_off_on_ms(&self, duration: u64);
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
 }
 
