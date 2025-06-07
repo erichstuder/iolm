@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "probe-rs launch",
+            "name": "stm32f446re launch",
             "type": "probe-rs-debug",
             "request": "launch",
-            "preLaunchTask": "firmware_build",
+            "preLaunchTask": "examples_stm32f446re_build",
             "cwd": "${workspaceFolder}",
             "connectUnderReset": true,
             "chip": "STM32F446RE",
@@ -32,6 +32,7 @@
             "name": "std launch",
             "type": "lldb",
             "request": "launch",
+            "preLaunchTask": "examples_std_build",
             "program": "examples/std/target/debug/pc_example",
             "env": {
                 "RUST_LOG": "info"
