@@ -23,9 +23,16 @@ RUN rustup target add thumbv7em-none-eabihf
 WORKDIR /home/$USER/dependencies_fetch_project/dummy/l6360
 RUN cargo init
 COPY ./l6360/Cargo.toml .
+
 WORKDIR /home/$USER/dependencies_fetch_project/dummy/iol
 RUN cargo init
 COPY ./iol/Cargo.toml .
+
+WORKDIR /home/$USER/dependencies_fetch_project/dummy/examples/std
+RUN cargo init
+COPY ./examples/std/Cargo.toml .
+RUN cargo fetch
+
 WORKDIR /home/$USER/dependencies_fetch_project/dummy/examples/stm32f446re
 RUN cargo init
 COPY ./examples/stm32f446re/Cargo.toml .
