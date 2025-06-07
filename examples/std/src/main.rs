@@ -21,8 +21,28 @@ async fn main() {
 struct MasterActions;
 
 impl master::Actions for MasterActions {
+    async fn wait_us(&self, duration: u64) {
+        sleep(Duration::from_micros(duration)).await;
+    }
+
     async fn wait_ms(&self, duration: u64) {
         sleep(Duration::from_millis(duration)).await;
+    }
+
+    async fn cq_output(&self, state: master::CqOutputState) {
+        match state {
+            master::CqOutputState::Disable => info!("cq output disabled"),
+            master::CqOutputState::Enable => info!("cq output enabled"),
+        }
+    }
+
+    async fn get_cq(&self) -> l6360::PinState {
+        info!("get cq");
+        l6360::PinState::Low
+    }
+
+    async fn do_ready_pulse(&self) {
+        info!("ready pulse done");
     }
 
     async fn port_power_on(&self) {

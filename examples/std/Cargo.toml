@@ -10,7 +10,7 @@ chrono = "=0.4.41"
 
 log = "=0.4.27"
 env_logger = "=0.11.8"
-anstyle = "=1.0.10"
+anstyle = "=1.0.11"
 
 l6360 = { version = "=0.0.0", path = "../../l6360" }
 iol = { version = "=0.0.0", path = "../../iol", features = ["master", "iols", "log"] }

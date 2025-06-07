@@ -1,8 +1,8 @@
 #![cfg_attr(not(test), no_std)]
 
-#[cfg(feature = "log")]
-use log::info;
-#[cfg(feature = "defmt")]
+//#[cfg(feature = "log")]
+//use log::info;
+//#[cfg(feature = "defmt")]
 //use defmt::info;
 
 use embedded_hal_async::i2c::{self, I2c};
