@@ -29,11 +29,11 @@ pub enum Event {
 
 #[cfg_attr(test, automock)]
 pub trait Actions {
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn port_power_on(&self);
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn port_power_off(&self);
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn await_event_with_timeout_ms(&self, duration: u64) -> Event;
 }
 
