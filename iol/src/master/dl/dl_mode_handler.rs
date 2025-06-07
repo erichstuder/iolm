@@ -70,8 +70,10 @@ enum Safety {
 pub trait Actions {
     #[allow(async_fn_in_trait)]
     async fn wait_ms(&self, duration: u64);
+
     #[allow(async_fn_in_trait)]
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
+
     #[allow(async_fn_in_trait)]
     async fn port_power_off_on_ms(&self, duration: u64);
 }
@@ -79,9 +81,13 @@ pub trait Actions {
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
 
-pub struct StateMachine<T: Actions, PlActions: pl::Actions > {
+pub struct StateMachine<A, PlActions>
+where
+    A: Actions,
+    PlActions: pl::Actions,
+{
     state: State,
-    actions: T,
+    actions: A,
     pl: PL<PlActions>,
     retry: u8,
     #[cfg(feature = "iols")]
@@ -92,8 +98,12 @@ pub struct StateMachine<T: Actions, PlActions: pl::Actions > {
     time_to_ready_ms: u64,
 }
 
-impl<T: Actions, PlActions: pl::Actions > StateMachine<T, PlActions> {
-    pub fn new(actions: T, pl: PL<PlActions>) -> Self {
+impl<A, PlActions> StateMachine<A, PlActions>
+where
+    A: Actions,
+    PlActions: pl::Actions,
+{
+    pub fn new(actions: A, pl: PL<PlActions>) -> Self {
         Self {
             state: State::Idle_0,
             actions,

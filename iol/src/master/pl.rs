@@ -1,3 +1,5 @@
+// see #5.3.3.3
+
 // #[cfg(feature = "log")]
 // use log::info;
 // #[cfg(feature = "defmt")]
@@ -13,21 +15,23 @@ pub enum CqOutputState {
 pub trait Actions {
     #[allow(async_fn_in_trait)]
     async fn wait_us(&self, duration: u64);
+
     #[allow(async_fn_in_trait)]
     async fn cq_output(&self, state: CqOutputState);
+
     #[allow(async_fn_in_trait)]
     async fn get_cq(&self) -> PinState;
+
     #[allow(async_fn_in_trait)]
     async fn do_ready_pulse(&self); //TODO: maybe this needs the information whether to do the pulse up or down. Or shall it be done there? Document it!
 }
 
-pub struct PL<T: Actions>
-{
-    actions: T,
+pub struct PL<A: Actions> {
+    actions: A,
 }
 
-impl<T: Actions> PL<T> {
-    pub fn new(actions: T) -> Self {
+impl<A: Actions> PL<A> {
+    pub fn new(actions: A) -> Self {
         Self {
             actions,
         }

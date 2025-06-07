@@ -6,7 +6,7 @@
 use crate::master::pl::{self, PL};
 
 mod dl_mode_handler;
-pub type DlModeHandlerStateMachine<T, PlActions> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>, PlActions>;
+pub type DlModeHandlerStateMachine<A, PlActions> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>, PlActions>;
 pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
 
 
@@ -50,11 +50,11 @@ pub trait Actions {
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
 }
 
-pub struct DlModeHandlerActionsImpl<T: Actions>{
-    pub actions: T,
+pub struct DlModeHandlerActionsImpl<A: Actions>{
+    pub actions: A,
 }
 
-impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
+impl<A: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<A> {
     async fn wait_ms(&self, duration: u64) {
         self.actions.wait_ms(duration).await;
     }
@@ -68,19 +68,27 @@ impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
     }
 }
 
-pub struct DL<T: Actions, PlActions: pl::Actions> {
+pub struct DL<A, PlActions>
+where
+    A: Actions,
+    PlActions: pl::Actions,
+{
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
     // pd_output_length: PDOutputLength,
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 
-    _actions: T, //unused at the moment, maybe later
+    _actions: A, //unused at the moment, maybe later
     phantom: core::marker::PhantomData<PlActions>,
 }
 
-impl<T: Actions + Copy, PlActions: pl::Actions> DL<T, PlActions> {
-    pub fn new(actions: T, pl: PL<PlActions>) -> (Self, DlModeHandlerStateMachine<T, PlActions>) {
+impl<A, PlActions> DL<A, PlActions>
+where
+    A: Actions + Copy,
+    PlActions: pl::Actions,
+{
+    pub fn new(actions: A, pl: PL<PlActions>) -> (Self, DlModeHandlerStateMachine<A, PlActions>) {
         (
             Self{
                 _actions: actions,

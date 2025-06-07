@@ -31,8 +31,10 @@ pub enum Event {
 pub trait Actions {
     #[allow(async_fn_in_trait)]
     async fn port_power_on(&self);
+
     #[allow(async_fn_in_trait)]
     async fn port_power_off(&self);
+
     #[allow(async_fn_in_trait)]
     async fn await_event_with_timeout_ms(&self, duration: u64) -> Event;
 }
@@ -40,15 +42,15 @@ pub trait Actions {
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, (), 1> = Channel::new();
 
-pub struct StateMachine<T: Actions> {
+pub struct StateMachine<A: Actions> {
     state: State,
-    actions: T,
+    actions: A,
     off_timer_active: bool,
     off_time: u64,
 }
 
-impl<T: Actions> StateMachine<T> {
-    pub fn new(actions: T) -> Self{
+impl<A: Actions> StateMachine<A> {
+    pub fn new(actions: A) -> Self{
         Self {
             state: State::PowerOn_0,
             actions,
