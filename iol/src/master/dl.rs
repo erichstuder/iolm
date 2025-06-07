@@ -3,8 +3,10 @@
 // #[cfg(feature = "defmt")]
 // use defmt::info;
 
-pub mod dl_mode_handler;
-pub type DlModeHandlerStateMachine<T> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>>;
+use crate::master::pl::{self, PL};
+
+mod dl_mode_handler;
+pub type DlModeHandlerStateMachine<T, PlActions> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>, PlActions>;
 pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
 
 
@@ -66,26 +68,29 @@ impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
     }
 }
 
-pub struct DL<T: Actions> {
+pub struct DL<T: Actions, PlActions: pl::Actions> {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
     // pd_output_length: PDOutputLength,
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 
-    _actions: T //unused at the moment, maybe later
+    _actions: T, //unused at the moment, maybe later
+    phantom: core::marker::PhantomData<PlActions>,
 }
 
-impl<T: Actions + Copy> DL<T> {
-    pub fn new(actions: T) -> (Self, DlModeHandlerStateMachine<T>) {
+impl<T: Actions + Copy, PlActions: pl::Actions> DL<T, PlActions> {
+    pub fn new(actions: T, pl: PL<PlActions>) -> (Self, DlModeHandlerStateMachine<T, PlActions>) {
         (
             Self{
                 _actions: actions,
+                phantom: core::marker::PhantomData::<PlActions>,
             },
             dl_mode_handler::StateMachine::new(
                 DlModeHandlerActionsImpl{
                     actions,
-                }
+                },
+                pl,
             ),
         )
     }

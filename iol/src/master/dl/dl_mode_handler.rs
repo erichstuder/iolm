@@ -6,6 +6,8 @@ use defmt::info;
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
+use crate::master::pl::{self, PL};
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum State {
     #[allow(non_camel_case_types)]
@@ -77,9 +79,10 @@ pub trait Actions {
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
 
-pub struct StateMachine<T: Actions> {
+pub struct StateMachine<T: Actions, PlActions: pl::Actions > {
     state: State,
     actions: T,
+    pl: PL<PlActions>,
     retry: u8,
     #[cfg(feature = "iols")]
     safety: Safety,
@@ -89,11 +92,12 @@ pub struct StateMachine<T: Actions> {
     time_to_ready_ms: u64,
 }
 
-impl<T: Actions> StateMachine<T> {
-    pub fn new(actions: T) -> Self {
+impl<T: Actions, PlActions: pl::Actions > StateMachine<T, PlActions> {
+    pub fn new(actions: T, pl: PL<PlActions>) -> Self {
         Self {
             state: State::Idle_0,
             actions,
+            pl,
             retry: 0,
             #[cfg(feature = "iols")]
             safety: Safety::SafetyCom, //TODO: don't know yet where it will be set from.
@@ -137,6 +141,7 @@ impl<T: Actions> StateMachine<T> {
             },
             State::EstablishCom_1 => {
                 info!("EstablishCom_1");
+                self.pl.PL_WakeUp().await;
                 self.actions.wait_ms(3000).await;
             },
             #[cfg(feature = "iols")]

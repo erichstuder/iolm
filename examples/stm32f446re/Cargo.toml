@@ -17,7 +17,7 @@ panic-probe = { version = "=1.0.0", features = ["print-defmt"] }
 defmt = "=1.0.1"
 defmt-rtt = "=1.0.0"
 
-l6360 = { version = "=0.0.0", path = "../../l6360" }
+l6360 = { version = "=0.0.0", path = "../../l6360", features = ["defmt"] }
 iol = { version = "=0.0.0", path = "../../iol", features = ["master", "iols", "defmt"] }
 
 [profile.release]

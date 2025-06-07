@@ -1,7 +1,13 @@
 #![cfg_attr(not(test), no_std)]
 
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+//use defmt::info;
+
 use embedded_hal_async::i2c::{self, I2c};
 use embedded_hal::digital::{OutputPin, InputPin};
+use num_enum::TryFromPrimitive;
 pub use embedded_hal::digital::PinState;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -13,6 +19,18 @@ pub enum EN_CGQ_CQ_PullDown {
 
 pub struct ControlRegister1 {
     pub en_cgq_cq_pulldown: EN_CGQ_CQ_PullDown,
+}
+
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
+pub enum CqOutputStageConfiguration {
+    OFF        = 0b000,
+    LowSide    = 0b001,
+    HighSide   = 0b010,
+    PushPull   = 0b011,
+    TriState   = 0b100,
+    LowSideON  = 0b101,
+    HighSideON = 0b110,
 }
 
 pub struct Config {
@@ -41,6 +59,8 @@ where
     InputPinType: InputPin,
 {
     pub enl_plus: OutputPinType,
+    pub en_cq: OutputPinType,
+    pub in_cq: OutputPinType,
     pub out_cq: InputPinType,
 }
 
@@ -96,7 +116,29 @@ where
         else {
             0b0010_0001
         };
-        self.set_register(0b0010, data).await?;
+        self.write_register(0b0010, data).await?;
+        Ok(())
+    }
+
+    pub async fn set_cq_out_stage_configuration(&mut self, config: CqOutputStageConfiguration) -> L6360result<(), I2C> {
+        const CONFIG_REGISTER_ADDRESS: u8 = 0b0001;
+        const BIT_SHIFT: u8 = 5;
+        let current_register_value = self.read_register_random(CONFIG_REGISTER_ADDRESS).await.unwrap() >> BIT_SHIFT;
+        match CqOutputStageConfiguration::try_from(current_register_value).unwrap() {
+            CqOutputStageConfiguration::OFF |
+            CqOutputStageConfiguration::TriState => (),
+
+            CqOutputStageConfiguration::LowSide |
+            CqOutputStageConfiguration::HighSide |
+            CqOutputStageConfiguration::PushPull |
+            CqOutputStageConfiguration::LowSideON |
+            CqOutputStageConfiguration::HighSideON => {
+                self.write_register(CONFIG_REGISTER_ADDRESS, CqOutputStageConfiguration::OFF as u8).await?;
+            }
+        }
+
+        let register_value = (config as u8) << BIT_SHIFT;
+        self.write_register(CONFIG_REGISTER_ADDRESS, register_value).await?;
         Ok(())
     }
 
@@ -109,12 +151,12 @@ where
         };
 
         for i in 0..=1 {
-            self.set_register(reg_addr_start + i as u8, led_pattern_msb_lsb[i]).await?;
+            self.write_register(reg_addr_start + i as u8, led_pattern_msb_lsb[i]).await?;
         }
         Ok(())
     }
 
-    async fn set_register(&mut self, register_address: u8, data: u8) -> L6360result<(), I2C> {
+    async fn write_register(&mut self, register_address: u8, data: u8) -> L6360result<(), I2C> {
         if !(0b0000..=0b1000).contains(&register_address) {
             return Err(Error::InvalidRegisterAddress);
         }
@@ -122,6 +164,18 @@ where
         let parity_and_reg_addr = (parity << 5) | (register_address);
         self.i2c.write(self.address_7bit, &[data, parity_and_reg_addr]).await.map_err(Error::I2cError)?;
         Ok(())
+    }
+
+    async fn read_register_random(&mut self, register_address: u8)  -> L6360result<u8, I2C> {
+        if !(0b0000..=0b1000).contains(&register_address) {
+            return Err(Error::InvalidRegisterAddress);
+        }
+
+        self.i2c.write(self.address_7bit, &[register_address]).await.map_err(Error::I2cError)?;
+        let mut buf = [0u8; 1];
+        self.i2c.read(self.address_7bit, &mut buf).await.map_err(Error::I2cError)?;
+        Ok(buf[0])
+
     }
 
     fn calculate_parity(data: u8) -> u8 {
@@ -198,6 +252,8 @@ mod tests {
             let mock_i2c = MockI2c::new();
             let pins = Pins {
                 enl_plus: MockOutputPinType::new(),
+                en_cq: MockOutputPinType::new(),
+                in_cq: MockOutputPinType::new(),
                 out_cq: MockInputPinType::new(),
             };
             let config = Config::default();
@@ -224,6 +280,8 @@ mod tests {
             let i2c_address = 0b0_1100_111;
             let pins = Pins {
                 enl_plus: MockOutputPinType::new(),
+                en_cq: MockOutputPinType::new(),
+                in_cq: MockOutputPinType::new(),
                 out_cq: MockInputPinType::new(),
             };
             let config = Config {
@@ -271,6 +329,8 @@ mod tests {
             let mut i2c_mock = MockI2c::new();
             let pins = Pins {
                 enl_plus: MockOutputPinType::new(),
+                en_cq: MockOutputPinType::new(),
+                in_cq: MockOutputPinType::new(),
                 out_cq: MockInputPinType::new(),
             };
 
