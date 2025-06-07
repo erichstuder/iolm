@@ -1,7 +1,7 @@
-#[cfg(feature = "log")]
-use log::info;
-#[cfg(feature = "defmt")]
-use defmt::info;
+// #[cfg(feature = "log")]
+// use log::info;
+// #[cfg(feature = "defmt")]
+// use defmt::info;
 
 pub use embedded_hal::digital::PinState;
 
