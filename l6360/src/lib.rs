@@ -6,9 +6,13 @@
 //use defmt::info;
 
 use embedded_hal_async::i2c::{self, I2c};
-use embedded_hal::digital::{OutputPin, InputPin};
+use embedded_hal::digital::OutputPin;
 use num_enum::TryFromPrimitive;
 pub use embedded_hal::digital::PinState;
+
+pub trait Uart {
+    fn send_read(&mut self, data: &[u8], answer: &[u8]) -> Result<(), ()>;
+}
 
 #[derive(PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
@@ -53,15 +57,12 @@ pub enum Led {
     LED2,
 }
 
-pub struct Pins<OutputPinType, InputPinType>
+pub struct Pins<OutputPinType>
 where
     OutputPinType: OutputPin,
-    InputPinType: InputPin,
 {
     pub enl_plus: OutputPinType,
     pub en_cq: OutputPinType,
-    pub in_cq: OutputPinType,
-    pub out_cq: InputPinType,
 }
 
 #[derive(Debug)]
@@ -73,31 +74,33 @@ pub enum Error<I2cError> {
 
 type L6360result<T, I2C> = Result<T, Error<<I2C as i2c::ErrorType>::Error>>;
 
-pub struct L6360<I2C, OutputPinType, InputPinType>
+pub struct L6360<I2C, U, OutputPinType>
 where
     I2C: I2c,
+    U: Uart,
     OutputPinType: OutputPin,
-    InputPinType: InputPin,
 {
     i2c: I2C,
+    pub uart: U,
     address_7bit: i2c::SevenBitAddress,
-    pub pins: Pins<OutputPinType, InputPinType>,
+    pub pins: Pins<OutputPinType>,
     config: Config,
 }
 
-impl<I2C, OutputPinType, InputPinType> L6360<I2C, OutputPinType, InputPinType>
+impl<I2C, U, OutputPinType> L6360<I2C, U, OutputPinType>
 where
     I2C: I2c,
+    U: Uart,
     OutputPinType: OutputPin,
-    InputPinType: InputPin,
 {
-    pub fn new(i2c: I2C, address_7bit: i2c::SevenBitAddress, pins: Pins<OutputPinType, InputPinType>, config: Config) -> L6360result<Self, I2C> {
+    pub fn new(i2c: I2C, uart: U, address_7bit: i2c::SevenBitAddress, pins: Pins<OutputPinType>, config: Config) -> L6360result<Self, I2C> {
         if !(0b0_1100_000..=0b0_1100_111).contains(&address_7bit) {
             return Err(Error::Invalid7bitAddress);
         }
 
         Ok(Self {
             i2c,
+            uart,
             address_7bit,
             pins,
             config,

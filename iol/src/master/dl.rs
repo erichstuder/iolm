@@ -9,6 +9,8 @@ mod dl_mode_handler;
 pub type DlModeHandlerStateMachine<A, PlActions> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>, PlActions>;
 pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
 
+mod message_handler;
+
 
 pub enum Mode {
     #[allow(unused)] //TODO: remove

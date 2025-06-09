@@ -5,10 +5,11 @@ edition = "2021"
 
 [dependencies]
 embassy-stm32 = { version = "=0.2.0", features = ["defmt", "stm32f446re", "unstable-pac", "memory-x", "time-driver-tim4", "exti", "chrono"]}
-embassy-sync = { version = "=0.6.2", features = ["defmt"] }
+embassy-sync = { version = "=0.7.0", features = ["defmt"] }
 embassy-executor = { version = "=0.7.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
 embassy-time = { version = "0.4.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 embedded-hal = "=1.0.0"
+embedded-io-async = "=0.6.1"
 nb = "=1.1.0"
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "=0.7.5"
@@ -16,6 +17,7 @@ critical-section = "=1.2.0"
 panic-probe = { version = "=1.0.0", features = ["print-defmt"] }
 defmt = "=1.0.1"
 defmt-rtt = "=1.0.0"
+static_cell = "=2.1.0"
 
 l6360 = { version = "=0.0.0", path = "../../l6360", features = ["defmt"] }
 iol = { version = "=0.0.0", path = "../../iol", features = ["master", "iols", "defmt"] }

@@ -5,12 +5,15 @@ use defmt::*;
 use embassy_executor::{Spawner, main, task};
 use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::i2c::{self, I2c};
+use embassy_stm32::usart::{self, BufferedUart};
+use embedded_io_async::BufRead;
 use embassy_stm32::mode::Async;
 use embassy_stm32::bind_interrupts;
-use embassy_stm32::peripherals;
+use embassy_stm32::peripherals::{self, USART1};
 use embassy_stm32::time::Hertz;
 use embassy_time::Instant;
 use embassy_time::Timer;
+use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 use l6360::{self, L6360};
@@ -19,7 +22,7 @@ use iol::master;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-static L6360: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<'static, Async>, Output, Input>>> = Mutex::new(None);
+static L6360: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<'static, Async>, L6360_Uart<peripherals::PA9, peripherals::PA10>, Output>>> = Mutex::new(None);
 
 #[derive(Copy, Clone)]
 struct MasterActions;
@@ -37,7 +40,7 @@ impl master::Actions for MasterActions {
     async fn cq_output(&self, state: master::CqOutputState) {
         if let Some(l6360) = L6360.lock().await.as_mut() {
 
-            l6360.pins.in_cq.set_level(Level::High); // TODO: Note: so the output stays low. Think where to do it.
+            l6360.uart.in_cq(Level::High); // TODO: Note: so the output stays low. Think where to do it.
             let _ = l6360.set_cq_out_stage_configuration(l6360::CqOutputStageConfiguration::PushPull).await; //TODO: set to the correct value
 
             match state {
@@ -57,7 +60,7 @@ impl master::Actions for MasterActions {
         if let Some(l6360) = L6360.lock().await.as_mut() {
             // Note: For a reason I don't understand yet, embassy does not use PinState.
             // Note: The l6360 inverts the state of C/Q.
-            match l6360.pins.out_cq.get_level() {
+            match l6360.uart.out_cq() {
                 Level::High => return master::PinState::Low,
                 Level::Low => return master::PinState::High,
             }
@@ -67,7 +70,8 @@ impl master::Actions for MasterActions {
 
     async fn do_ready_pulse(&self) {
         if let Some(l6360) = L6360.lock().await.as_mut() {
-            l6360.pins.in_cq.set_level(Level::Low);
+            // Note: The l6360 inverts the state of C/Q.
+            l6360.uart.in_cq(Level::Low);
 
             // Busy waiting as we have to be very fast. This could be done nicer.
             let mut count = 0;
@@ -75,7 +79,7 @@ impl master::Actions for MasterActions {
                 count += 1;
             }
 
-            l6360.pins.in_cq.set_level(Level::High);
+            l6360.uart.in_cq(Level::High);
             return;
         }
         crate::panic!("couldn't access L6360");
@@ -108,7 +112,7 @@ impl master::Actions for MasterActions {
         if let Some(l6360) = L6360.lock().await.as_mut() {
             let result = embassy_time::with_timeout(
                 embassy_time::Duration::from_millis(duration),
-                measure_ready_pulse(&mut l6360.pins.out_cq)
+                measure_ready_pulse(l6360.uart.out_cq.as_mut().unwrap())
             ).await;
 
             match result {
@@ -119,6 +123,89 @@ impl master::Actions for MasterActions {
         else {
             crate::panic!("Lock to L6360 failed"); //TODO: why is crate:: necessary here?
         }
+    }
+
+    // async fn send_read(){
+
+    // }
+}
+
+bind_interrupts!(struct UartIrqs {
+    USART1 => usart::BufferedInterruptHandler<USART1>;
+});
+
+#[allow(non_camel_case_types)]
+struct L6360_Uart<'a, TX, RX>
+where
+    TX: usart::TxPin<USART1>,
+    RX: usart::RxPin<USART1>,
+{
+    uart_instance: Option<USART1>,
+    tx_pin: Option<TX>,
+    rx_pin: Option<RX>,
+    in_cq: Option<Output<'a>>,
+    out_cq: Option<Input<'a>>,
+    uart: Option<BufferedUart<'a>>,
+}
+
+// Note: This struct uses unsafe to be able to switch between gpio and uart.
+impl<'a, TX, RX> L6360_Uart<'a, TX, RX>
+where
+    TX: usart::TxPin<USART1>,
+    RX: usart::RxPin<USART1>,
+{
+    fn new(uart_instance: USART1, tx_pin: TX, rx_pin: RX) -> Self {
+        let tx_clone = unsafe { tx_pin.clone_unchecked() };
+        let rx_clone = unsafe { rx_pin.clone_unchecked() };
+
+        Self {
+            uart_instance: Some(uart_instance),
+            tx_pin: Some(tx_pin),
+            rx_pin: Some(rx_pin),
+            in_cq: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
+            out_cq: Some(Input::new(rx_clone, Pull::None)),
+            uart: None,
+        }
+    }
+
+    pub fn in_cq(&mut self, level: Level) {
+        self.in_cq.as_mut().unwrap().set_level(level);
+    }
+
+    pub fn out_cq(&self) -> Level {
+        self.out_cq.as_ref().unwrap().get_level()
+    }
+
+    fn switch_to_uart(&mut self) {
+        // Drop gpios before initalizing uart.
+        drop(self.in_cq.take());
+        drop(self.out_cq.take());
+
+        static TX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
+        let tx_buf = TX_BUF.init([0u8; 100]);
+        static RX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
+        let rx_buf = RX_BUF.init([0u8; 100]);
+
+        self.uart = Some(BufferedUart::new(
+            self.uart_instance.take().unwrap(),
+            UartIrqs,
+            self.rx_pin.take().unwrap(),
+            self.tx_pin.take().unwrap(),
+            tx_buf,
+            rx_buf,
+            usart::Config::default()
+        ).unwrap());
+    }
+}
+
+impl<'a, TX, RX> l6360::Uart for L6360_Uart<'a, TX, RX>
+where
+    TX: usart::TxPin<USART1>,
+    RX: usart::RxPin<USART1>,
+{
+    fn send_read(&mut self, _data: &[u8], _answer: &[u8]) -> Result<(), ()> {
+        self.uart.as_mut().unwrap().fill_buf();
+        Ok(())
     }
 }
 
@@ -131,7 +218,7 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(blink(led)).unwrap();
 
-    bind_interrupts!(struct Irqs {
+    bind_interrupts!(struct I2cIrqs {
         I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
         I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
     });
@@ -140,7 +227,7 @@ async fn main(spawner: Spawner) {
         peripherals.I2C1,
         peripherals.PB8,
         peripherals.PB9,
-        Irqs,
+        I2cIrqs,
         peripherals.DMA1_CH6,
         peripherals.DMA1_CH0,
         Hertz(400_000),
@@ -153,11 +240,12 @@ async fn main(spawner: Spawner) {
         },
     );
 
+
+    let uart = L6360_Uart::new(peripherals.USART1, peripherals.PA9, peripherals.PA10);
+
     let pins = l6360::Pins {
         enl_plus: Output::new(peripherals.PA6, Level::Low, Speed::Low),
         en_cq: Output::new(peripherals.PC0, Level::Low, Speed::Low),
-        in_cq: Output::new(peripherals.PA9, Level::Low, Speed::Low),
-        out_cq: Input::new(peripherals.PA10, Pull::None),
     };
 
     let config = l6360::Config {
@@ -166,7 +254,7 @@ async fn main(spawner: Spawner) {
         }
     };
 
-    *L6360.lock().await = Some(L6360::new(i2c, 0b1100_000, pins, config).unwrap());
+    *L6360.lock().await = Some(L6360::new(i2c, uart, 0b1100_000, pins, config).unwrap());
 
     let mut l6360_ref = L6360.lock().await;
     let l6360 = l6360_ref.as_mut().unwrap();

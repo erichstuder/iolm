@@ -7,6 +7,7 @@ use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 use crate::master::pl::{self, PL};
+// use crate::master::dl::message_handler as mh;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum State {
@@ -20,10 +21,10 @@ pub enum State {
     // PreOperate_3,
     //#[allow(non_camel_case_types)]
     //Operate_4,
-    // #[allow(non_camel_case_types)]
-    // WURQ_5,
+    #[allow(non_camel_case_types)]
+    WURQ_5,
     // ComRequestCOM3_6,
-    // ComRequestCOM2_7,
+    ComRequestCOM2_7,
     // ComRequestCOM1_8,
     // #[allow(non_camel_case_types)]
     // Retry_9,
@@ -149,11 +150,6 @@ where
                 self.retry = 0;
                 self.state = State::EstablishCom_1;
             },
-            State::EstablishCom_1 => {
-                info!("EstablishCom_1");
-                self.pl.PL_WakeUp().await;
-                self.actions.wait_ms(3000).await;
-            },
             #[cfg(feature = "iols")]
             State::WaitOnPortPowerOn_11 => {
                 info!("WaitOnPortPowerOn_11");
@@ -181,6 +177,27 @@ where
 
                 self.actions.wait_ms(1000).await; //TODO:remove
             },
+            State::EstablishCom_1 => {
+                info!("EstablishCom_1");
+                self.state = State::WURQ_5;
+            },
+            State::WURQ_5 => {
+                info!("WURQ_5");
+                self.pl.PL_WakeUp().await;
+                self.state = State::ComRequestCOM2_7; // Note: For the moment we jump directly to COM2 instead of COM3 => fix!
+            },
+            State::ComRequestCOM2_7 => {
+                info!("ComRequestCOM2_7");
+                // TODO: T_DMT is 32 * T_BIT which results in about 833us for COM2. We try 1ms
+                // TODO: Where to put the speed Definitions for COM3, COM2, COM1 ?
+                const T_DMT: u64 = 1;
+                self.actions.wait_ms(T_DMT).await;
+                // ComRequest
+                // mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx(mh::TransmissionRate::COM2)).await;
+                // mh::RESULT_CHANNEL.receive().await;
+
+                self.actions.wait_ms(10000).await;
+            }
         }
     }
 }

@@ -69,6 +69,10 @@ impl<A: Actions> pl::Actions for PlActions<A> {
     async fn do_ready_pulse(&self) {
         self.actions.do_ready_pulse().await
     }
+
+    fn exchange_data(&self) {
+        //TODO: implementation
+    }
 }
 
 pub struct PortPowerSwitchingActions<A: Actions> {
