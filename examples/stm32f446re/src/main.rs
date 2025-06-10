@@ -75,7 +75,7 @@ impl master::Actions for MasterActions {
 
             // Busy waiting as we have to be very fast. This could be done nicer.
             let mut count = 0;
-            while count < 32 {
+            while count < 36 {
                 count += 1;
             }
 
