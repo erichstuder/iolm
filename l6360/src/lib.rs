@@ -17,7 +17,8 @@ pub use embedded_hal::digital::PinState;
 pub trait Uart {
     fn in_cq(&mut self, level: PinState);
     fn out_cq(&self) -> PinState;
-    fn exchange(&mut self, data: &[u8], answer: &[u8]);
+    #[allow(async_fn_in_trait)]
+    async fn exchange(&mut self, data: &[u8], answer: &mut [u8]);
 }
 
 #[derive(PartialEq, Clone, Copy)]

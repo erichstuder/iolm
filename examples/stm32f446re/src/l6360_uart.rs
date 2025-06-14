@@ -4,7 +4,7 @@ use embassy_stm32::peripherals;
 use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::Peripheral;
 use static_cell::StaticCell;
-use embedded_io_async::BufRead;
+use embedded_io_async::{Write, Read};
 
 bind_interrupts!(struct UartIrqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
@@ -57,6 +57,15 @@ impl<'a> L6360_Uart<'a> {
         static RX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
         let rx_buf = RX_BUF.init([0u8; 100]);
 
+        let mut config = usart::Config::default();
+        config.baudrate = 38_400; //TODO: COM2 for the moment but fix it!
+        config.data_bits = usart::DataBits::DataBits8;
+        config.stop_bits = usart::StopBits::STOP1;
+        config.parity = usart::Parity::ParityEven;
+        config.detect_previous_overrun = true;
+        config.assume_noise_free = false;
+        config.rx_pull = Pull::None;
+
         self.uart = Some(BufferedUart::new(
             self.uart_instance.take().unwrap(),
             UartIrqs,
@@ -64,7 +73,7 @@ impl<'a> L6360_Uart<'a> {
             self.tx_pin.take().unwrap(),
             tx_buf,
             rx_buf,
-            usart::Config::default()
+            config,
         ).unwrap());
 
         self.mode = Mode::Uart;
@@ -90,7 +99,9 @@ impl<'a> l6360::Uart for L6360_Uart<'a> {
         }
     }
 
-    fn exchange(&mut self, _data: &[u8], _answer: &[u8]) {
-        let _ = self.uart.as_mut().unwrap().fill_buf(); //TODO: implement
+    async fn exchange(&mut self, data: &[u8], answer: &mut [u8]) {
+        let uart = self.uart.as_mut().unwrap();
+        let _ = uart.write_all(data).await.unwrap();
+        uart.read_exact(answer).await.unwrap();
     }
 }
