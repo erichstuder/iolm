@@ -1,13 +1,14 @@
 // see #7.3.3
 
-// #[cfg(feature = "log")]
-// use log::info;
-// #[cfg(feature = "defmt")]
-// use defmt::info;
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
 
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
+use crate::master::dl::message_handler::m_sequences;
+use crate::common::annex_b::direct_parameter_page_1_and_2::address;
 enum State {
     #[allow(non_camel_case_types)]
     Inactive_0,
@@ -34,12 +35,13 @@ enum State {
 
 // TODO: Is this the right place for this enum? see also Table 9
 pub enum TransmissionRate {
-    COM1 = 4800,
+    //COM1 = 4800,
     COM2 = 38400,
-    COM3 = 230400,
+    //COM3 = 230400,
 }
 
 pub enum Event {
+    #[allow(non_camel_case_types)]
     MH_Conf_COMx(TransmissionRate),
 }
 
@@ -81,7 +83,18 @@ impl StateMachine {
                 let event = self.await_event().await;
                 match event {
                     Event::MH_Conf_COMx(rate) => {
-                        // send message
+                        match rate {
+                            TransmissionRate::COM2 => {
+                                info!("MH_Conf_COMx with transmission Rate COM2");
+                                // Send a message with the requested transmission rate of COMx and with
+                                // M-sequence TYPE_0: Read Direct Parameter page 1, address 0x02
+                                // ("MinCycleTime"), compiling into an M-sequence control MC = 0xA2 (see
+                                // A.1.2). Start timer with T M-sequence .
+
+                                let _m_sequence = m_sequences::TYPE_0::new(m_sequences::CommunicationChannel::Page, address::MinCycleTime);
+                                //pl.exchange(data, answer_buf)
+                            }
+                        }
                     }
                 }
             },

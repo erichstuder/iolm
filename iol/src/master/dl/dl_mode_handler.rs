@@ -7,7 +7,7 @@ use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 use crate::master::pl::{self, PL};
-// use crate::master::dl::message_handler as mh;
+use crate::master::dl::message_handler as mh;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum State {
@@ -193,8 +193,8 @@ where
                 const T_DMT: u64 = 1;
                 self.actions.wait_ms(T_DMT).await;
                 // ComRequest
-                //mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx(mh::TransmissionRate::COM2)).await;
-                //mh::RESULT_CHANNEL.receive().await;
+                mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx(mh::TransmissionRate::COM2)).await;
+                mh::RESULT_CHANNEL.receive().await;
 
                 self.actions.wait_ms(10000).await;
             }

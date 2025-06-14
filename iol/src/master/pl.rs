@@ -60,7 +60,7 @@ impl<A: Actions> PL<A> {
     }
 
     #[allow(non_snake_case)]
-    pub async fn PL_Transfer(&mut self, data: &[u8], out: &mut [u8]) {
-        let result = self.actions.exchange_data();
+    pub async fn PL_Transfer(&mut self, _data: &[u8], _answer: &mut [u8]) {
+        let _result = self.actions.exchange_data(); //TODO: implement
     }
 }
