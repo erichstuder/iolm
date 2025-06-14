@@ -25,7 +25,8 @@ pub trait Actions {
     #[allow(async_fn_in_trait)]
     async fn do_ready_pulse(&self); //TODO: maybe this needs the information whether to do the pulse up or down. Or shall it be done there? Document it!
 
-    fn exchange_data(&self);
+    #[allow(async_fn_in_trait)]
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
 }
 
 pub struct PL<A: Actions> {
@@ -60,7 +61,8 @@ impl<A: Actions> PL<A> {
     }
 
     #[allow(non_snake_case)]
-    pub async fn PL_Transfer(&mut self, _data: &[u8], _answer: &mut [u8]) {
-        let _result = self.actions.exchange_data(); //TODO: implement
+    pub async fn PL_Transfer(&mut self, data: &[u8], answer: &mut [u8]) -> Result<(), ()> {
+        let _result = self.actions.exchange_data(data, answer); //TODO: implement
+        Ok(())
     }
 }

@@ -6,16 +6,12 @@ use defmt::*;
 use embassy_executor::{Spawner, main, task};
 use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::i2c::{self, I2c};
-use embassy_stm32::usart::{self, BufferedUart};
-use embedded_io_async::BufRead;
 use embassy_stm32::mode::Async;
 use embassy_stm32::bind_interrupts;
 use embassy_stm32::peripherals;
 use embassy_stm32::time::Hertz;
-use embassy_stm32::Peripheral;
 use embassy_time::Instant;
 use embassy_time::Timer;
-use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 use l6360::{self, L6360, Uart};
@@ -23,6 +19,9 @@ use iol::master;
 
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
+mod l6360_uart;
+use l6360_uart::L6360_Uart;
 
 static L6360: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_Uart, Output>>> = Mutex::new(None);
 
@@ -127,91 +126,16 @@ impl master::Actions for MasterActions {
         }
     }
 
-    async fn exchange_m_sequence() {
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
         if let Some(l6360) = L6360.lock().await.as_mut() {
-            let data: [u8; 2] = [0, 0];
-            l6360.uart.switch_to_uart();
-            let _ = l6360.uart.exchange(&data, &data); //TODO: set correct data
+            if l6360.uart.get_mode() != l6360_uart::Mode::Uart {
+                l6360.uart.switch_to_uart();
+            }
+            let _ = l6360.uart.exchange(data, answer); //TODO: set correct data
         }
         else {
             crate::panic!("Lock to L6360 failed"); //TODO: why is crate:: necessary here?
         }
-    }
-}
-
-bind_interrupts!(struct UartIrqs {
-    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
-});
-
-// Note: bind_interrupts is not generic. This leads to having concrete types.
-#[allow(non_camel_case_types)]
-struct L6360_Uart<'a> {
-    uart_instance: Option<peripherals::USART1>,
-    tx_pin: Option<peripherals::PA9>,
-    rx_pin: Option<peripherals::PA10>,
-    in_cq_: Option<Output<'a>>, //TODO: rename
-    out_cq_: Option<Input<'a>>, //TODO: rename
-    uart: Option<BufferedUart<'a>>,
-}
-
-impl<'a> L6360_Uart<'a> {
-    fn new(uart_instance: peripherals::USART1, tx_pin: peripherals::PA9, rx_pin: peripherals::PA10) -> Self {
-        // Note: This struct uses unsafe to be able to switch between gpio and uart.
-        #[allow(unsafe_code)]
-        let tx_clone = unsafe { tx_pin.clone_unchecked() };
-        #[allow(unsafe_code)]
-        let rx_clone = unsafe { rx_pin.clone_unchecked() };
-
-        Self {
-            uart_instance: Some(uart_instance),
-            tx_pin: Some(tx_pin),
-            rx_pin: Some(rx_pin),
-            in_cq_: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
-            out_cq_: Some(Input::new(rx_clone, Pull::None)),
-            uart: None,
-        }
-    }
-
-    fn switch_to_uart(&mut self) {
-        // Drop gpios before initalizing uart.
-        drop(self.in_cq_.take());
-        drop(self.out_cq_.take());
-
-        static TX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
-        let tx_buf = TX_BUF.init([0u8; 100]);
-        static RX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
-        let rx_buf = RX_BUF.init([0u8; 100]);
-
-        self.uart = Some(BufferedUart::new(
-            self.uart_instance.take().unwrap(),
-            UartIrqs,
-            self.rx_pin.take().unwrap(),
-            self.tx_pin.take().unwrap(),
-            tx_buf,
-            rx_buf,
-            usart::Config::default()
-        ).unwrap());
-    }
-}
-
-impl<'a> l6360::Uart for L6360_Uart<'a> {
-    fn in_cq(&mut self, level: l6360::PinState) {
-        match level {
-            l6360::PinState::High => self.in_cq_.as_mut().unwrap().set_level(Level::High),
-            l6360::PinState::Low => self.in_cq_.as_mut().unwrap().set_level(Level::Low),
-        }
-    }
-
-    fn out_cq(&self) -> l6360::PinState {
-        match self.out_cq_.as_ref().unwrap().get_level() {
-            Level::High => l6360::PinState::High,
-            Level::Low => l6360::PinState::Low,
-        }
-    }
-
-    fn exchange(&mut self, _data: &[u8], _answer: &[u8]) -> Result<usize, ()> {
-        let _ = self.uart.as_mut().unwrap().fill_buf(); //TODO: implement
-        Ok(0) //TODO: add correct usize
     }
 }
 

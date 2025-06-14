@@ -91,8 +91,8 @@ impl StateMachine {
                                 // ("MinCycleTime"), compiling into an M-sequence control MC = 0xA2 (see
                                 // A.1.2). Start timer with T M-sequence .
 
-                                let _m_sequence = m_sequences::TYPE_0::new(m_sequences::CommunicationChannel::Page, address::MinCycleTime);
-                                //pl.exchange(data, answer_buf)
+                                let m_sequence = m_sequences::TYPE_0::new(m_sequences::CommunicationChannel::Page, address::MinCycleTime);
+                                //pl.PL_Transfer(m_sequence.master_message, m_sequence.device_message);
                             }
                         }
                     }

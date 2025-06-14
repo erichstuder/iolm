@@ -49,7 +49,7 @@ pub trait Actions {
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
 
     #[allow(async_fn_in_trait)]
-    async fn exchange_m_sequence();
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
 }
 
 pub struct PlActions<A: Actions> {
@@ -73,8 +73,8 @@ impl<A: Actions> pl::Actions for PlActions<A> {
         self.actions.do_ready_pulse().await
     }
 
-    fn exchange_data(&self) {
-        //TODO: implementation
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
+        self.actions.exchange_data(data, answer).await;
     }
 }
 

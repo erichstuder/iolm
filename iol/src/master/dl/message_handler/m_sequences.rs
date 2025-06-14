@@ -19,15 +19,13 @@ enum M_Sequence_Type{
 
 // TODO: are all settings supported for all M-Sequence-Types?
 #[allow(non_camel_case_types)]
-struct M_Sequence<const SEND_ON_REQUEST_DATA: bool, const M: usize, const D: usize> {
-    master_message: [u8; M],
-    device_message: [u8; D],
-    master_message_size: usize,
-    device_message_size: usize,
+pub struct M_Sequence<const SEND_ON_REQUEST_DATA: bool, const M: usize, const D: usize> {
+    pub master_message: [u8; M],
+    pub device_message: [u8; D],
 }
 
 #[allow(non_camel_case_types)]
-pub struct TYPE_0<const SEND_ON_REQUEST_DATA: bool>(M_Sequence<SEND_ON_REQUEST_DATA, 3, 2>);
+pub type TYPE_0<const SEND_ON_REQUEST_DATA: bool> = M_Sequence<SEND_ON_REQUEST_DATA, 2, 2>;
 // #[allow(non_camel_case_types)]
 // pub type TYPE_1_1<const SEND_ON_REQUEST_DATA: bool> = M_Sequence<SEND_ON_REQUEST_DATA, 4, 3>;
 
@@ -35,18 +33,14 @@ impl TYPE_0<false> {
     pub fn new(communication_channel: CommunicationChannel, address: u8) -> Self {
         let mut master_message = [
             annex_a::create_mc(RW::ReadAccess, communication_channel, address),
-            annex_a::create_ckt(annex_a::M_Sequence_Type::Type_0, 0),
-            0,
+            annex_a::create_ckt_without_checksum(annex_a::M_Sequence_Type::Type_0),
         ];
-
         annex_a::calculate_checksum(&mut master_message, 2);
 
-        Self(M_Sequence {
+        Self {
             master_message,
             device_message: [0;2],
-            master_message_size: 2,
-            device_message_size: 2,
-        })
+        }
     }
 }
 
@@ -83,13 +77,8 @@ mod annex_a {
         ((rw as u8) << 7) | ((channel as u8) << 5) | (address)
     }
 
-    //TODO: test
-    //TODO: dont know yet whether to paste the checksum here already
-    pub fn create_ckt(m_sequence_type: M_Sequence_Type, checksum: u8) -> u8 {
-        if checksum > 0b11_1111 {
-            panic!("invalid checksum size");
-        }
-        ((m_sequence_type as u8) << 6) | (checksum)
+    pub fn create_ckt_without_checksum(m_sequence_type: M_Sequence_Type) -> u8 {
+        (m_sequence_type as u8) << 6
     }
 
     pub fn calculate_checksum(message: &mut [u8], size: usize) {
