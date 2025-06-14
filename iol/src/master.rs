@@ -47,6 +47,9 @@ pub trait Actions {
 
     #[allow(async_fn_in_trait)]
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
+
+    #[allow(async_fn_in_trait)]
+    async fn exchange_m_sequence();
 }
 
 pub struct PlActions<A: Actions> {

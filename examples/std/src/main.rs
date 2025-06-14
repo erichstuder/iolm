@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 use tokio::time::{sleep, Duration, timeout};
 use std::future::Future;
 use log::info;

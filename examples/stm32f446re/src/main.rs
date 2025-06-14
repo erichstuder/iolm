@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 #![no_main]
 #![cfg_attr(not(test), no_std)]
 
@@ -9,20 +10,21 @@ use embassy_stm32::usart::{self, BufferedUart};
 use embedded_io_async::BufRead;
 use embassy_stm32::mode::Async;
 use embassy_stm32::bind_interrupts;
-use embassy_stm32::peripherals::{self, USART1};
+use embassy_stm32::peripherals;
 use embassy_stm32::time::Hertz;
+use embassy_stm32::Peripheral;
 use embassy_time::Instant;
 use embassy_time::Timer;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
-use l6360::{self, L6360};
+use l6360::{self, L6360, Uart};
 use iol::master;
 
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-static L6360: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<'static, Async>, L6360_Uart<peripherals::PA9, peripherals::PA10>, Output>>> = Mutex::new(None);
+static L6360: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_Uart, Output>>> = Mutex::new(None);
 
 #[derive(Copy, Clone)]
 struct MasterActions;
@@ -40,7 +42,7 @@ impl master::Actions for MasterActions {
     async fn cq_output(&self, state: master::CqOutputState) {
         if let Some(l6360) = L6360.lock().await.as_mut() {
 
-            l6360.uart.in_cq(Level::High); // TODO: Note: so the output stays low. Think where to do it.
+            l6360.uart.in_cq(l6360::PinState::High); // TODO: Note: so the output stays low. Think where to do it.
             let _ = l6360.set_cq_out_stage_configuration(l6360::CqOutputStageConfiguration::PushPull).await; //TODO: set to the correct value
 
             match state {
@@ -61,8 +63,8 @@ impl master::Actions for MasterActions {
             // Note: For a reason I don't understand yet, embassy does not use PinState.
             // Note: The l6360 inverts the state of C/Q.
             match l6360.uart.out_cq() {
-                Level::High => return master::PinState::Low,
-                Level::Low => return master::PinState::High,
+                l6360::PinState::High => return master::PinState::Low,
+                l6360::PinState::Low => return master::PinState::High,
             }
         }
         crate::panic!("couldn't access L6360");
@@ -71,7 +73,7 @@ impl master::Actions for MasterActions {
     async fn do_ready_pulse(&self) {
         if let Some(l6360) = L6360.lock().await.as_mut() {
             // Note: The l6360 inverts the state of C/Q.
-            l6360.uart.in_cq(Level::Low);
+            l6360.uart.in_cq(l6360::PinState::Low);
 
             // Busy waiting as we have to be very fast. This could be done nicer.
             let mut count = 0;
@@ -79,7 +81,7 @@ impl master::Actions for MasterActions {
                 count += 1;
             }
 
-            l6360.uart.in_cq(Level::High);
+            l6360.uart.in_cq(l6360::PinState::High);
             return;
         }
         crate::panic!("couldn't access L6360");
@@ -112,7 +114,7 @@ impl master::Actions for MasterActions {
         if let Some(l6360) = L6360.lock().await.as_mut() {
             let result = embassy_time::with_timeout(
                 embassy_time::Duration::from_millis(duration),
-                measure_ready_pulse(l6360.uart.out_cq.as_mut().unwrap())
+                measure_ready_pulse(l6360.uart.out_cq_.as_mut().unwrap())
             ).await;
 
             match result {
@@ -125,61 +127,55 @@ impl master::Actions for MasterActions {
         }
     }
 
-    // async fn send_read(){
-
-    // }
+    async fn exchange_m_sequence() {
+        if let Some(l6360) = L6360.lock().await.as_mut() {
+            let data: [u8; 2] = [0, 0];
+            l6360.uart.switch_to_uart();
+            let _ = l6360.uart.exchange(&data, &data); //TODO: set correct data
+        }
+        else {
+            crate::panic!("Lock to L6360 failed"); //TODO: why is crate:: necessary here?
+        }
+    }
 }
 
 bind_interrupts!(struct UartIrqs {
-    USART1 => usart::BufferedInterruptHandler<USART1>;
+    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
 });
 
+// Note: bind_interrupts is not generic. This leads to having concrete types.
 #[allow(non_camel_case_types)]
-struct L6360_Uart<'a, TX, RX>
-where
-    TX: usart::TxPin<USART1>,
-    RX: usart::RxPin<USART1>,
-{
-    uart_instance: Option<USART1>,
-    tx_pin: Option<TX>,
-    rx_pin: Option<RX>,
-    in_cq: Option<Output<'a>>,
-    out_cq: Option<Input<'a>>,
+struct L6360_Uart<'a> {
+    uart_instance: Option<peripherals::USART1>,
+    tx_pin: Option<peripherals::PA9>,
+    rx_pin: Option<peripherals::PA10>,
+    in_cq_: Option<Output<'a>>, //TODO: rename
+    out_cq_: Option<Input<'a>>, //TODO: rename
     uart: Option<BufferedUart<'a>>,
 }
 
-// Note: This struct uses unsafe to be able to switch between gpio and uart.
-impl<'a, TX, RX> L6360_Uart<'a, TX, RX>
-where
-    TX: usart::TxPin<USART1>,
-    RX: usart::RxPin<USART1>,
-{
-    fn new(uart_instance: USART1, tx_pin: TX, rx_pin: RX) -> Self {
+impl<'a> L6360_Uart<'a> {
+    fn new(uart_instance: peripherals::USART1, tx_pin: peripherals::PA9, rx_pin: peripherals::PA10) -> Self {
+        // Note: This struct uses unsafe to be able to switch between gpio and uart.
+        #[allow(unsafe_code)]
         let tx_clone = unsafe { tx_pin.clone_unchecked() };
+        #[allow(unsafe_code)]
         let rx_clone = unsafe { rx_pin.clone_unchecked() };
 
         Self {
             uart_instance: Some(uart_instance),
             tx_pin: Some(tx_pin),
             rx_pin: Some(rx_pin),
-            in_cq: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
-            out_cq: Some(Input::new(rx_clone, Pull::None)),
+            in_cq_: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
+            out_cq_: Some(Input::new(rx_clone, Pull::None)),
             uart: None,
         }
     }
 
-    pub fn in_cq(&mut self, level: Level) {
-        self.in_cq.as_mut().unwrap().set_level(level);
-    }
-
-    pub fn out_cq(&self) -> Level {
-        self.out_cq.as_ref().unwrap().get_level()
-    }
-
     fn switch_to_uart(&mut self) {
         // Drop gpios before initalizing uart.
-        drop(self.in_cq.take());
-        drop(self.out_cq.take());
+        drop(self.in_cq_.take());
+        drop(self.out_cq_.take());
 
         static TX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
         let tx_buf = TX_BUF.init([0u8; 100]);
@@ -198,14 +194,24 @@ where
     }
 }
 
-impl<'a, TX, RX> l6360::Uart for L6360_Uart<'a, TX, RX>
-where
-    TX: usart::TxPin<USART1>,
-    RX: usart::RxPin<USART1>,
-{
-    fn send_read(&mut self, _data: &[u8], _answer: &[u8]) -> Result<(), ()> {
-        self.uart.as_mut().unwrap().fill_buf();
-        Ok(())
+impl<'a> l6360::Uart for L6360_Uart<'a> {
+    fn in_cq(&mut self, level: l6360::PinState) {
+        match level {
+            l6360::PinState::High => self.in_cq_.as_mut().unwrap().set_level(Level::High),
+            l6360::PinState::Low => self.in_cq_.as_mut().unwrap().set_level(Level::Low),
+        }
+    }
+
+    fn out_cq(&self) -> l6360::PinState {
+        match self.out_cq_.as_ref().unwrap().get_level() {
+            Level::High => l6360::PinState::High,
+            Level::Low => l6360::PinState::Low,
+        }
+    }
+
+    fn exchange(&mut self, _data: &[u8], _answer: &[u8]) -> Result<usize, ()> {
+        let _ = self.uart.as_mut().unwrap().fill_buf(); //TODO: implement
+        Ok(0) //TODO: add correct usize
     }
 }
 

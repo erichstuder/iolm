@@ -43,6 +43,10 @@ pub enum Event {
     MH_Conf_COMx(TransmissionRate),
 }
 
+// pub trait Actions {
+//     fn 
+// }
+
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, (), 1> = Channel::new();
 

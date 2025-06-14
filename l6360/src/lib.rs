@@ -11,7 +11,9 @@ use num_enum::TryFromPrimitive;
 pub use embedded_hal::digital::PinState;
 
 pub trait Uart {
-    fn send_read(&mut self, data: &[u8], answer: &[u8]) -> Result<(), ()>;
+    fn in_cq(&mut self, level: PinState);
+    fn out_cq(&self) -> PinState;
+    fn exchange(&mut self, data: &[u8], answer: &[u8]) -> Result<usize, ()>;
 }
 
 #[derive(PartialEq, Clone, Copy)]
