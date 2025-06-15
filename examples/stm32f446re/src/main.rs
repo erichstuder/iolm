@@ -29,12 +29,9 @@ static L6360_: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_Uar
 
 #[main]
 async fn main(spawner: Spawner) {
-    let peripherals = embassy_stm32::init(Default::default());
-    info!("Hello World!");
+    let p = embassy_stm32::init(Default::default());
 
-    let led = Output::new(peripherals.PA5, Level::High, Speed::Low);
-
-    spawner.spawn(blink(led)).unwrap();
+    blink_led(spawner, p.PA5);
 
     bind_interrupts!(struct I2cIrqs {
         I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
@@ -42,12 +39,12 @@ async fn main(spawner: Spawner) {
     });
 
     let i2c = I2c::new(
-        peripherals.I2C1,
-        peripherals.PB8,
-        peripherals.PB9,
+        p.I2C1,
+        p.PB8,
+        p.PB9,
         I2cIrqs,
-        peripherals.DMA1_CH6,
-        peripherals.DMA1_CH0,
+        p.DMA1_CH6,
+        p.DMA1_CH0,
         Hertz(400_000),
         {
             let mut i2c_config = i2c::Config::default();
@@ -58,12 +55,11 @@ async fn main(spawner: Spawner) {
         },
     );
 
-
-    let uart = L6360_Uart::new(peripherals.USART1, peripherals.PA9, peripherals.PA10);
+    let uart = L6360_Uart::new(p.USART1, p.PA9, p.PA10);
 
     let pins = l6360::Pins {
-        enl_plus: Output::new(peripherals.PA6, Level::Low, Speed::Low),
-        en_cq: Output::new(peripherals.PC0, Level::Low, Speed::Low),
+        enl_plus: Output::new(p.PA6, Level::Low, Speed::Low),
+        en_cq: Output::new(p.PC0, Level::Low, Speed::Low),
     };
 
     let config = l6360::Config {
@@ -107,15 +103,20 @@ async fn run_dl(mut dl: master::DlModeHandlerStateMachine<MasterActions>) {
     dl.run().await;
 }
 
-#[task]
-async fn blink(mut led: Output<'static>) -> ! {
-    loop {
-        //info!("high");
-        led.set_high();
-        Timer::after_millis(2000).await;
+fn blink_led(spawner: Spawner, pin: peripherals::PA5) {
+    let led = Output::new(pin, Level::High, Speed::Low);
+    spawner.spawn(blink(led)).unwrap();
 
-        //info!("low");
-        led.set_low();
-        Timer::after_millis(2000).await;
+    #[task]
+    async fn blink(mut led: Output<'static>) -> ! {
+        loop {
+            //info!("high");
+            led.set_high();
+            Timer::after_millis(2000).await;
+
+            //info!("low");
+            led.set_low();
+            Timer::after_millis(2000).await;
+        }
     }
 }
