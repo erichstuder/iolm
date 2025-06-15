@@ -7,7 +7,7 @@ use iol::master;
 use l6360::{self, Uart};
 
 use crate::l6360_uart;
-use super::L6360_;
+use super::IOL_TRANSCEIVER;
 
 #[derive(Copy, Clone)]
 pub struct MasterActions;
@@ -23,7 +23,7 @@ impl master::Actions for MasterActions {
 
     // Note: This function should haven another name, so it is clear what exactly the output stage shall be configured to.
     async fn cq_output(&self, state: master::CqOutputState) {
-        if let Some(l6360) = L6360_.lock().await.as_mut() {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
 
             l6360.uart.in_cq(l6360::PinState::High); // TODO: Note: so the output stays low. Think where to do it.
             let _ = l6360.set_cq_out_stage_configuration(l6360::CqOutputStageConfiguration::PushPull).await; //TODO: set to the correct value
@@ -42,7 +42,7 @@ impl master::Actions for MasterActions {
     }
 
     async fn get_cq(&self) -> master::PinState {
-        if let Some(l6360) = L6360_.lock().await.as_mut() {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             // Note: For a reason I don't understand yet, embassy does not use PinState.
             // Note: The l6360 inverts the state of C/Q.
             match l6360.uart.out_cq() {
@@ -54,7 +54,7 @@ impl master::Actions for MasterActions {
     }
 
     async fn do_ready_pulse(&self) {
-        if let Some(l6360) = L6360_.lock().await.as_mut() {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             // Note: The l6360 inverts the state of C/Q.
             l6360.uart.in_cq(l6360::PinState::Low);
 
@@ -72,7 +72,7 @@ impl master::Actions for MasterActions {
 
     async fn port_power_on(&self) {
         info!("port power on ...");
-        if let Some(l6360) = L6360_.lock().await.as_mut() {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             l6360.pins.enl_plus.set_high();
         }
         info!("done");
@@ -80,7 +80,7 @@ impl master::Actions for MasterActions {
 
     async fn port_power_off(&self) {
         info!("port power off ...");
-        if let Some(l6360) = L6360_.lock().await.as_mut() {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             l6360.pins.enl_plus.set_low();
         }
         info!("done");
@@ -94,7 +94,7 @@ impl master::Actions for MasterActions {
     }
 
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> master::ReadyPulseResult {
-        if let Some(l6360) = L6360_.lock().await.as_mut() {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             let result = embassy_time::with_timeout(
                 embassy_time::Duration::from_millis(duration),
                 measure_ready_pulse(l6360.uart.out_cq.as_mut().unwrap())
@@ -111,7 +111,7 @@ impl master::Actions for MasterActions {
     }
 
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
-        if let Some(l6360) = L6360_.lock().await.as_mut() {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             if l6360.uart.get_mode() != l6360_uart::Mode::Uart {
                 l6360.uart.switch_to_uart();
             }

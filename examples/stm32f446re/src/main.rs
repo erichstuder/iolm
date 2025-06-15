@@ -25,7 +25,7 @@ use l6360_uart::L6360_Uart;
 mod master_actions;
 use master_actions::MasterActions;
 
-static L6360_: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_Uart, Output>>> = Mutex::new(None);
+static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_Uart, Output>>> = Mutex::new(None);
 
 #[main]
 async fn main(spawner: Spawner) {
@@ -68,9 +68,9 @@ async fn main(spawner: Spawner) {
         }
     };
 
-    *L6360_.lock().await = Some(L6360::new(i2c, uart, 0b1100_000, pins, config).unwrap());
+    *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, uart, 0b1100_000, pins, config).unwrap());
 
-    let mut l6360_ref = L6360_.lock().await;
+    let mut l6360_ref = IOL_TRANSCEIVER.lock().await;
     let l6360 = l6360_ref.as_mut().unwrap();
     l6360.init().await.unwrap();
     l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
