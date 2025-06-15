@@ -31,15 +31,21 @@ static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, 
 async fn main(spawner: Spawner) {
     setup_hardware(spawner).await;
 
-    let mut l6360_ref = IOL_TRANSCEIVER.lock().await;
-    let l6360 = l6360_ref.as_mut().unwrap();
-    l6360.init().await.unwrap();
-    l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
-    l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
-    l6360.pins.enl_plus.set_high();
-    //spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
-    drop(l6360_ref);
+    // initialize iol transceiver
+    let mut iol_transceiver_ref = IOL_TRANSCEIVER.lock().await;
+    let iol_transceiver = iol_transceiver_ref.as_mut().unwrap();
+    iol_transceiver.init().await.unwrap();
 
+    // set some blink pattern (just for fun)
+    iol_transceiver.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
+    iol_transceiver.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
+
+    // power the connected iol-device
+    iol_transceiver.pins.enl_plus.set_high();
+    //spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
+    drop(iol_transceiver_ref);
+
+    // setup iol stack and run
     let (mut master, port_power_switching, dl) = master::Master::new(MasterActions);
     spawner.spawn(run_port_power_switching(port_power_switching)).unwrap();
     spawner.spawn(run_dl(dl)).unwrap();
