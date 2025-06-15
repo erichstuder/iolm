@@ -29,9 +29,62 @@ static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, 
 
 #[main]
 async fn main(spawner: Spawner) {
+    setup_hardware(spawner).await;
+
+    let mut l6360_ref = IOL_TRANSCEIVER.lock().await;
+    let l6360 = l6360_ref.as_mut().unwrap();
+    l6360.init().await.unwrap();
+    l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
+    l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
+    l6360.pins.enl_plus.set_high();
+    //spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
+    drop(l6360_ref);
+
+    let (mut master, port_power_switching, dl) = master::Master::new(MasterActions);
+    spawner.spawn(run_port_power_switching(port_power_switching)).unwrap();
+    spawner.spawn(run_dl(dl)).unwrap();
+
+    // test code
+    Timer::after_millis(2_000).await;
+    info!("startup");
+    master.dl_set_mode_startup().await;
+    Timer::after_millis(100_000).await;
+}
+
+#[task]
+async fn run_port_power_switching(mut port_power_switching: master::PortPowerSwitchingStateMachine<MasterActions>) {
+    info!("run port power switching");
+    port_power_switching.run().await;
+}
+
+#[task]
+async fn run_dl(mut dl: master::DlModeHandlerStateMachine<MasterActions>) {
+    info!("run dl");
+    dl.run().await;
+}
+
+fn heartbeat_led(spawner: Spawner, pin: peripherals::PA5) {
+    let led = Output::new(pin, Level::High, Speed::Low);
+    spawner.spawn(blink(led)).unwrap();
+
+    #[task]
+    async fn blink(mut led: Output<'static>) -> ! {
+        loop {
+            //info!("high");
+            led.set_high();
+            Timer::after_millis(2000).await;
+
+            //info!("low");
+            led.set_low();
+            Timer::after_millis(2000).await;
+        }
+    }
+}
+
+async fn setup_hardware(spawner: Spawner) {
     let p = embassy_stm32::init(Default::default());
 
-    blink_led(spawner, p.PA5);
+    heartbeat_led(spawner, p.PA5);
 
     bind_interrupts!(struct I2cIrqs {
         I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
@@ -69,54 +122,4 @@ async fn main(spawner: Spawner) {
     };
 
     *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, uart, 0b1100_000, pins, config).unwrap());
-
-    let mut l6360_ref = IOL_TRANSCEIVER.lock().await;
-    let l6360 = l6360_ref.as_mut().unwrap();
-    l6360.init().await.unwrap();
-    l6360.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
-    l6360.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
-    l6360.pins.enl_plus.set_high();
-    //spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
-    drop(l6360_ref);
-
-    let (mut master, port_power_switching, dl) = master::Master::new(MasterActions);
-    spawner.spawn(run_port_power_switching(port_power_switching)).unwrap();
-    spawner.spawn(run_dl(dl)).unwrap();
-
-    Timer::after_millis(2_000).await;
-
-    info!("startup");
-    master.dl_set_mode_startup().await;
-
-    Timer::after_millis(100_000).await;
-}
-
-#[task]
-async fn run_port_power_switching(mut port_power_switching: master::PortPowerSwitchingStateMachine<MasterActions>) {
-    info!("run port power switching");
-    port_power_switching.run().await;
-}
-
-#[task]
-async fn run_dl(mut dl: master::DlModeHandlerStateMachine<MasterActions>) {
-    info!("run dl");
-    dl.run().await;
-}
-
-fn blink_led(spawner: Spawner, pin: peripherals::PA5) {
-    let led = Output::new(pin, Level::High, Speed::Low);
-    spawner.spawn(blink(led)).unwrap();
-
-    #[task]
-    async fn blink(mut led: Output<'static>) -> ! {
-        loop {
-            //info!("high");
-            led.set_high();
-            Timer::after_millis(2000).await;
-
-            //info!("low");
-            led.set_low();
-            Timer::after_millis(2000).await;
-        }
-    }
 }
