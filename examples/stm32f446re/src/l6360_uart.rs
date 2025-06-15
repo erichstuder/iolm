@@ -22,8 +22,8 @@ pub struct L6360_Uart<'a> {
     uart_instance: Option<peripherals::USART1>,
     tx_pin: Option<peripherals::PA9>,
     rx_pin: Option<peripherals::PA10>,
-    pub in_cq_: Option<Output<'a>>, //TODO: rename
-    pub out_cq_: Option<Input<'a>>, //TODO: rename
+    pub in_cq: Option<Output<'a>>, //TODO: rename
+    pub out_cq: Option<Input<'a>>, //TODO: rename
     uart: Option<BufferedUart<'a>>,
     mode: Mode,
 }
@@ -40,8 +40,8 @@ impl<'a> L6360_Uart<'a> {
             uart_instance: Some(uart_instance),
             tx_pin: Some(tx_pin),
             rx_pin: Some(rx_pin),
-            in_cq_: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
-            out_cq_: Some(Input::new(rx_clone, Pull::None)),
+            in_cq: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
+            out_cq: Some(Input::new(rx_clone, Pull::None)),
             uart: None,
             mode: Mode::Gpio,
         }
@@ -49,8 +49,8 @@ impl<'a> L6360_Uart<'a> {
 
     pub fn switch_to_uart(&mut self) {
         // Drop gpios before initalizing uart.
-        drop(self.in_cq_.take());
-        drop(self.out_cq_.take());
+        drop(self.in_cq.take());
+        drop(self.out_cq.take());
 
         static TX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
         let tx_buf = TX_BUF.init([0u8; 100]);
@@ -87,13 +87,13 @@ impl<'a> L6360_Uart<'a> {
 impl<'a> l6360::Uart for L6360_Uart<'a> {
     fn in_cq(&mut self, level: l6360::PinState) {
         match level {
-            l6360::PinState::High => self.in_cq_.as_mut().unwrap().set_level(Level::High),
-            l6360::PinState::Low => self.in_cq_.as_mut().unwrap().set_level(Level::Low),
+            l6360::PinState::High => self.in_cq.as_mut().unwrap().set_level(Level::High),
+            l6360::PinState::Low => self.in_cq.as_mut().unwrap().set_level(Level::Low),
         }
     }
 
     fn out_cq(&self) -> l6360::PinState {
-        match self.out_cq_.as_ref().unwrap().get_level() {
+        match self.out_cq.as_ref().unwrap().get_level() {
             Level::High => l6360::PinState::High,
             Level::Low => l6360::PinState::Low,
         }

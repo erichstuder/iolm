@@ -113,7 +113,7 @@ impl master::Actions for MasterActions {
         if let Some(l6360) = L6360.lock().await.as_mut() {
             let result = embassy_time::with_timeout(
                 embassy_time::Duration::from_millis(duration),
-                measure_ready_pulse(l6360.uart.out_cq_.as_mut().unwrap())
+                measure_ready_pulse(l6360.uart.out_cq.as_mut().unwrap())
             ).await;
 
             match result {
