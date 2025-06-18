@@ -3,6 +3,8 @@
 // #[cfg(feature = "defmt")]
 // use defmt::info;
 
+use futures;
+
 use crate::master::pl::{self, PL};
 
 mod dl_mode_handler;
@@ -82,7 +84,8 @@ where
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 
     _actions: A, //unused at the moment, maybe later
-    phantom: core::marker::PhantomData<PlActions>,
+    dl_mode_handler: dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>, PlActions>,
+    message_handler: message_handler::MessageHandler,
 }
 
 impl<A, PlActions> DL<A, PlActions>
@@ -90,23 +93,26 @@ where
     A: Actions + Copy,
     PlActions: pl::Actions,
 {
-    pub fn new(actions: A, pl: PL<PlActions>) -> (Self, DlModeHandlerStateMachine<A, PlActions>) {
-        (
-            Self{
-                _actions: actions,
-                phantom: core::marker::PhantomData::<PlActions>,
-            },
-            dl_mode_handler::StateMachine::new(
-                DlModeHandlerActionsImpl{
-                    actions,
-                },
-                pl,
-            ),
-        )
+    pub fn new(actions: A, pl: PL<PlActions>) -> Self {
+        Self {
+            _actions: actions,
+            dl_mode_handler: dl_mode_handler::StateMachine::new(
+                    DlModeHandlerActionsImpl{ actions },
+                    pl
+                ),
+            message_handler: message_handler::MessageHandler::new(),
+        }
+    }
+
+    pub async fn run(&mut self) {
+        futures::join!(
+            self.dl_mode_handler.run(),
+            self.message_handler.run(),
+        );
     }
 
     #[allow(non_snake_case)]
-    pub async fn DL_SetMode(&mut self, mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
+    pub async fn DL_SetMode(mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
         // self.m_sequence_time = value_list.m_sequence_time;
         // self.m_sequence_type = value_list.m_sequence_type;
         // self.pd_input_length = value_list.pd_input_length;

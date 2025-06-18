@@ -46,27 +46,20 @@ async fn main(spawner: Spawner) {
     drop(iol_transceiver_ref);
 
     // setup iol stack and run
-    let (mut master, port_power_switching, dl) = master::Master::new(MasterActions);
-    spawner.spawn(run_port_power_switching(port_power_switching)).unwrap();
-    spawner.spawn(run_dl(dl)).unwrap();
+    let master = master::Master::new(MasterActions);
+    spawner.spawn(run_master(master)).unwrap();
 
     // test code
     Timer::after_millis(2_000).await;
     info!("startup");
-    master.dl_set_mode_startup().await;
+    master::Master::<MasterActions>::dl_set_mode_startup().await;
     Timer::after_millis(100_000).await;
 }
 
 #[task]
-async fn run_port_power_switching(mut port_power_switching: master::PortPowerSwitchingStateMachine<MasterActions>) {
-    info!("run port power switching");
-    port_power_switching.run().await;
-}
-
-#[task]
-async fn run_dl(mut dl: master::DlModeHandlerStateMachine<MasterActions>) {
-    info!("run dl");
-    dl.run().await;
+async fn run_master(mut master: master::Master<MasterActions>) {
+    info!("run master");
+    master.run().await;
 }
 
 fn heartbeat_led(spawner: Spawner, pin: peripherals::PA5) {

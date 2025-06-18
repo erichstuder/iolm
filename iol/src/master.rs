@@ -5,6 +5,8 @@ use log::info;
 #[cfg(feature = "defmt")]
 use defmt::info;
 
+use futures;
+
 mod port_power_switching;
 pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<PortPowerSwitchingActions<A>>;
 
@@ -124,26 +126,27 @@ impl<A: Actions> dl::Actions for DlActions<A> {
 pub struct Master<A: Actions> {
     _actions: A, //unused at the moment. maybe later.
     dl: DL<DlActions<A>, PlActions<A>>,
+    port_power_switching: port_power_switching::StateMachine<PortPowerSwitchingActions<A>>,
 }
 
 impl<A: Actions + Copy> Master<A> {
-    pub fn new(actions: A) -> (Self, PortPowerSwitchingStateMachine<A>, DlModeHandlerStateMachine<A>) {
-        let port_power_switching_state_machine = port_power_switching::StateMachine::new(
-                PortPowerSwitchingActions { actions }
-            );
-
+    pub fn new(actions: A) -> Self{
         let pl = PL::new(PlActions { actions });
 
-        let (dl, dl_mode_handler_state_machine) = DL::new(DlActions { actions }, pl);
+        Self {
+            _actions: actions,
+            dl: DL::new(DlActions { actions }, pl),
+            port_power_switching: port_power_switching::StateMachine::new(
+                PortPowerSwitchingActions { actions }
+            ),
+        }
+    }
 
-        (
-            Self {
-                _actions: actions,
-                dl,
-            },
-            port_power_switching_state_machine,
-            dl_mode_handler_state_machine,
-        )
+    pub async fn run(&mut self) {
+        futures::join!(
+            self.dl.run(),
+            self.port_power_switching.run(),
+        );
     }
 
     //Some helper functions for the moment. They may be removed in the future.
@@ -163,7 +166,7 @@ impl<A: Actions + Copy> Master<A> {
     //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
     // }
 
-    pub async fn dl_set_mode_startup(&mut self) {
-        self.dl.DL_SetMode(dl::Mode::STARTUP).await.unwrap();
+    pub async fn dl_set_mode_startup() {
+        DL::<DlActions<A>, PlActions<A>>::DL_SetMode(dl::Mode::STARTUP).await.unwrap();
     }
 }
