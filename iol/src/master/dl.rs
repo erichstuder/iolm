@@ -5,10 +5,8 @@
 
 use futures;
 
-use crate::master::pl::{self, PL};
-
 mod dl_mode_handler;
-pub type DlModeHandlerStateMachine<A, PlActions> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>, PlActions>;
+pub type DlModeHandlerStateMachine<A> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>;
 pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
 
 mod message_handler;
@@ -72,11 +70,7 @@ impl<A: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<A> {
     }
 }
 
-pub struct DL<A, PlActions>
-where
-    A: Actions,
-    PlActions: pl::Actions,
-{
+pub struct DL<A:Actions> {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
@@ -84,22 +78,15 @@ where
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 
     _actions: A, //unused at the moment, maybe later
-    dl_mode_handler: dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>, PlActions>,
+    dl_mode_handler: dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>,
     message_handler: message_handler::MessageHandler,
 }
 
-impl<A, PlActions> DL<A, PlActions>
-where
-    A: Actions + Copy,
-    PlActions: pl::Actions,
-{
-    pub fn new(actions: A, pl: PL<PlActions>) -> Self {
+impl<A: Actions + Copy> DL<A> {
+    pub fn new(actions: A) -> Self {
         Self {
             _actions: actions,
-            dl_mode_handler: dl_mode_handler::StateMachine::new(
-                    DlModeHandlerActionsImpl{ actions },
-                    pl
-                ),
+            dl_mode_handler: dl_mode_handler::StateMachine::new(DlModeHandlerActionsImpl{ actions }),
             message_handler: message_handler::MessageHandler::new(),
         }
     }

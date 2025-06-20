@@ -7,6 +7,25 @@
 
 pub use embedded_hal::digital::PinState;
 
+use embassy_sync::channel::Channel;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
+pub enum Service<'a> {
+    //PL_SetMode,
+    #[allow(non_camel_case_types)]
+    PL_WakeUp,
+    #[allow(non_camel_case_types)]
+    PL_Transfer{data: &'a [u8], answer: &'a mut [u8]},
+}
+
+#[derive(PartialEq, Debug)]
+pub enum ServiceResult<'a> {
+    #[allow(non_camel_case_types)]
+    PL_WakeUp,
+    #[allow(non_camel_case_types)]
+    PL_Transfer{answer: &'a [u8]},
+}
+
 pub enum CqOutputState {
     Disable,
     Enable,
@@ -29,6 +48,9 @@ pub trait Actions {
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
 }
 
+pub static SERVICE_CHANNEL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::new();
+pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
+
 pub struct PL<A: Actions> {
     actions: A,
 }
@@ -40,8 +62,16 @@ impl<A: Actions> PL<A> {
         }
     }
 
-    #[allow(non_snake_case)]
-    pub async fn PL_WakeUp(&mut self) {
+    pub async fn run(&mut self) {
+        loop {
+            match SERVICE_CHANNEL.receive().await {
+                Service::PL_WakeUp => self.wake_up().await,
+                Service::PL_Transfer { data, answer } => { self.transfer(data, answer).await; }
+            }
+        }
+    }
+
+    pub async fn wake_up(&mut self) {
         #[allow(non_upper_case_globals)]
         const T_WU_us: u64 = 20;
         #[allow(non_upper_case_globals)]
@@ -58,11 +88,12 @@ impl<A: Actions> PL<A> {
         self.actions.cq_output(CqOutputState::Disable).await;
 
         self.actions.wait_us(T_REN_us - T_WU_us).await;
+
+        RESULT_CHANNEL.send(ServiceResult::PL_WakeUp).await;
     }
 
-    #[allow(non_snake_case)]
-    pub async fn PL_Transfer(&mut self, data: &[u8], answer: &mut [u8]) -> Result<(), ()> {
-        let _result = self.actions.exchange_data(data, answer); //TODO: implement
-        Ok(())
+    pub async fn transfer(&mut self, data: &[u8], answer: &'static mut [u8]) {
+        let _result = self.actions.exchange_data(data, answer).await; //TODO: implement
+        RESULT_CHANNEL.send(ServiceResult::PL_Transfer { answer }).await;
     }
 }

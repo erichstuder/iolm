@@ -6,7 +6,7 @@ use defmt::info;
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-use crate::master::pl::{self, PL};
+use crate::master::pl;
 use crate::master::dl::message_handler as mh;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -82,14 +82,9 @@ pub trait Actions {
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
 
-pub struct StateMachine<A, PlActions>
-where
-    A: Actions,
-    PlActions: pl::Actions,
-{
+pub struct StateMachine<A> {
     state: State,
     actions: A,
-    pl: PL<PlActions>,
     retry: u8,
     #[cfg(feature = "iols")]
     safety: Safety,
@@ -99,16 +94,11 @@ where
     time_to_ready_ms: u64,
 }
 
-impl<A, PlActions> StateMachine<A, PlActions>
-where
-    A: Actions,
-    PlActions: pl::Actions,
-{
-    pub fn new(actions: A, pl: PL<PlActions>) -> Self {
+impl<A: Actions> StateMachine<A> {
+    pub fn new(actions: A) -> Self {
         Self {
             state: State::Idle_0,
             actions,
-            pl,
             retry: 0,
             #[cfg(feature = "iols")]
             safety: Safety::SafetyCom, //TODO: don't know yet where it will be set from.
@@ -183,7 +173,11 @@ where
             },
             State::WURQ_5 => {
                 info!("WURQ_5");
-                self.pl.PL_WakeUp().await;
+                pl::SERVICE_CHANNEL.send(pl::Service::PL_WakeUp).await;
+                let result = pl::RESULT_CHANNEL.receive().await;
+                if result != pl::ServiceResult::PL_WakeUp {
+                    panic!("unexpected result: {:?}", result);
+                }
                 self.state = State::ComRequestCOM2_7; // Note: For the moment we jump directly to COM2 instead of COM3 => fix!
             },
             State::ComRequestCOM2_7 => {

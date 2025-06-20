@@ -18,7 +18,7 @@ pub use pl::PinState as PinState;
 mod dl;
 use dl::DL;
 pub use dl::ReadyPulseResult as ReadyPulseResult;
-pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<A>, PlActions<A>>;
+pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<A>>;
 
 pub trait Actions {
     #[allow(async_fn_in_trait)]
@@ -125,17 +125,17 @@ impl<A: Actions> dl::Actions for DlActions<A> {
 
 pub struct Master<A: Actions> {
     _actions: A, //unused at the moment. maybe later.
-    dl: DL<DlActions<A>, PlActions<A>>,
+    pl: PL<PlActions<A>>,
+    dl: DL<DlActions<A>>,
     port_power_switching: port_power_switching::StateMachine<PortPowerSwitchingActions<A>>,
 }
 
 impl<A: Actions + Copy> Master<A> {
     pub fn new(actions: A) -> Self{
-        let pl = PL::new(PlActions { actions });
-
         Self {
             _actions: actions,
-            dl: DL::new(DlActions { actions }, pl),
+            pl: PL::new(PlActions { actions }),
+            dl: DL::new(DlActions { actions }),
             port_power_switching: port_power_switching::StateMachine::new(
                 PortPowerSwitchingActions { actions }
             ),
@@ -144,6 +144,7 @@ impl<A: Actions + Copy> Master<A> {
 
     pub async fn run(&mut self) {
         futures::join!(
+            self.pl.run(),
             self.dl.run(),
             self.port_power_switching.run(),
         );
@@ -167,6 +168,6 @@ impl<A: Actions + Copy> Master<A> {
     // }
 
     pub async fn dl_set_mode_startup() {
-        DL::<DlActions<A>, PlActions<A>>::DL_SetMode(dl::Mode::STARTUP).await.unwrap();
+        DL::<DlActions<A>>::DL_SetMode(dl::Mode::STARTUP).await.unwrap();
     }
 }
