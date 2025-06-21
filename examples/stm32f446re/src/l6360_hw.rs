@@ -18,19 +18,26 @@ pub enum Mode {
 
 // Note: bind_interrupts is not generic. This leads to having concrete types.
 #[allow(non_camel_case_types)]
-pub struct L6360_Uart<'a> {
+pub struct L6360_HW<'a> {
     uart_instance: Option<peripherals::USART1>,
     tx_pin: Option<peripherals::PA9>,
     rx_pin: Option<peripherals::PA10>,
-    pub en_cq: Output<'a>,
-    pub in_cq: Option<Output<'a>>,
-    pub out_cq: Option<Input<'a>>,
+    enl_plus: Output<'a>,
+    en_cq: Output<'a>,
+    in_cq: Option<Output<'a>>,
+    out_cq: Option<Input<'a>>,
     uart: Option<BufferedUart<'a>>,
     mode: Mode,
 }
 
-impl<'a> L6360_Uart<'a> {
-    pub fn new(uart_instance: peripherals::USART1, tx_pin: peripherals::PA9, rx_pin: peripherals::PA10, en_cq: peripherals::PC0) -> Self {
+impl<'a> L6360_HW<'a> {
+    pub fn new(
+        uart_instance: peripherals::USART1,
+        tx_pin: peripherals::PA9,
+        rx_pin: peripherals::PA10,
+        enl_plus: peripherals::PA6,
+        en_cq: peripherals::PC0
+    ) -> Self {
         // Note: This struct uses unsafe to be able to switch between gpio and uart.
         #[allow(unsafe_code)]
         let tx_clone = unsafe { tx_pin.clone_unchecked() };
@@ -41,6 +48,7 @@ impl<'a> L6360_Uart<'a> {
             uart_instance: Some(uart_instance),
             tx_pin: Some(tx_pin),
             rx_pin: Some(rx_pin),
+            enl_plus: Output::new(enl_plus, Level::Low, Speed::Low),
             en_cq: Output::new(en_cq, Level::Low, Speed::Low),
             in_cq: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
             out_cq: Some(Input::new(rx_clone, Pull::None)),
@@ -86,11 +94,26 @@ impl<'a> L6360_Uart<'a> {
     }
 }
 
-impl<'a> l6360::Uart for L6360_Uart<'a> {
-    fn in_cq(&mut self, level: l6360::PinState) {
+impl<'a> l6360::HardwareAccess for L6360_HW<'a> {
+    fn enl_plus(&mut self, level: l6360::PinState) {
         match level {
-            l6360::PinState::High => self.in_cq.as_mut().unwrap().set_level(Level::High),
-            l6360::PinState::Low => self.in_cq.as_mut().unwrap().set_level(Level::Low),
+            l6360::PinState::High => self.enl_plus.set_level(Level::High),
+            l6360::PinState::Low => self.enl_plus.set_level(Level::Low),
+        }
+    }
+
+    fn en_cq(&mut self, level: l6360::PinState) {
+        match level {
+            l6360::PinState::High => self.en_cq.set_level(Level::High),
+            l6360::PinState::Low => self.en_cq.set_level(Level::Low),
+        }
+    }
+
+    fn in_cq(&mut self, level: l6360::PinState) {
+        let pin = self.in_cq.as_mut().unwrap();
+        match level {
+            l6360::PinState::High => pin.set_level(Level::High),
+            l6360::PinState::Low => pin.set_level(Level::Low),
         }
     }
 

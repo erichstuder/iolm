@@ -2,11 +2,13 @@ use defmt::*;
 use embassy_time::Timer;
 use embassy_time::Instant;
 use embassy_stm32::gpio::Input;
+use embassy_stm32::i2c::I2c;
+use embassy_stm32::mode::Async;
 
 use iol::master;
-use l6360::{self, Uart};
+use l6360::{self, L6360, HardwareAccess};
 
-use crate::l6360_uart;
+use crate::l6360_hw::{self, L6360_HW};
 use super::IOL_TRANSCEIVER;
 
 #[derive(Copy, Clone)]
@@ -25,17 +27,17 @@ impl master::Actions for MasterActions {
     async fn cq_output(&self, state: master::CqOutputState) {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
 
-            l6360.uart.in_cq(l6360::PinState::High); // TODO: Note: so the output stays low. Think where to do it.
+            l6360.hw.in_cq(l6360::PinState::High); // TODO: Note: so the output stays low. Think where to do it.
             let _ = l6360.set_cq_out_stage_configuration(l6360::CqOutputStageConfiguration::PushPull).await; //TODO: set to the correct value
 
             match state {
                 master::CqOutputState::Disable => {
                     info!("disable cq output");
-                    l6360.uart.en_cq.set_low();
+                    l6360.hw.en_cq(l6360::PinState::Low);
                 }
                 master::CqOutputState::Enable => {
                     info!("enable cq output");
-                    l6360.uart.en_cq.set_high();
+                    l6360.hw.en_cq(l6360::PinState::High);
                 }
             }
         }
@@ -45,7 +47,7 @@ impl master::Actions for MasterActions {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             // Note: For a reason I don't understand yet, embassy does not use PinState.
             // Note: The l6360 inverts the state of C/Q.
-            match l6360.uart.out_cq() {
+            match l6360.hw.out_cq() {
                 l6360::PinState::High => return master::PinState::Low,
                 l6360::PinState::Low => return master::PinState::High,
             }
@@ -56,7 +58,7 @@ impl master::Actions for MasterActions {
     async fn do_ready_pulse(&self) {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             // Note: The l6360 inverts the state of C/Q.
-            l6360.uart.in_cq(l6360::PinState::Low);
+            l6360.hw.in_cq(l6360::PinState::Low);
 
             // Busy waiting as we have to be very fast. This could be done nicer.
             let mut count = 0;
@@ -64,7 +66,7 @@ impl master::Actions for MasterActions {
                 count += 1;
             }
 
-            l6360.uart.in_cq(l6360::PinState::High);
+            l6360.hw.in_cq(l6360::PinState::High);
             return;
         }
         crate::panic!("couldn't access L6360");
@@ -73,7 +75,7 @@ impl master::Actions for MasterActions {
     async fn port_power_on(&self) {
         info!("port power on ...");
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
-            l6360.pins.enl_plus.set_high();
+            l6360.hw.enl_plus(l6360::PinState::High);
         }
         info!("done");
     }
@@ -81,7 +83,7 @@ impl master::Actions for MasterActions {
     async fn port_power_off(&self) {
         info!("port power off ...");
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
-            l6360.pins.enl_plus.set_low();
+            l6360.hw.enl_plus(l6360::PinState::Low);
         }
         info!("done");
     }
@@ -97,7 +99,7 @@ impl master::Actions for MasterActions {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             let result = embassy_time::with_timeout(
                 embassy_time::Duration::from_millis(duration),
-                measure_ready_pulse(l6360.uart.out_cq.as_mut().unwrap())
+                measure_ready_pulse(l6360),
             ).await;
 
             match result {
@@ -112,10 +114,10 @@ impl master::Actions for MasterActions {
 
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
-            if l6360.uart.get_mode() != l6360_uart::Mode::Uart {
-                l6360.uart.switch_to_uart();
+            if l6360.hw.get_mode() != l6360_hw::Mode::Uart {
+                l6360.hw.switch_to_uart();
             }
-            l6360.uart.exchange(data, answer).await;
+            l6360.hw.exchange(data, answer).await;
         }
         else {
             crate::panic!("Lock to L6360 failed"); //TODO: why is crate:: necessary here?
@@ -124,7 +126,7 @@ impl master::Actions for MasterActions {
 }
 
 
-async fn measure_ready_pulse(pin: &mut Input<'static>) {
+async fn measure_ready_pulse(l6360: &mut L6360<I2c<'static, Async>, L6360_HW<'static>>) {
     // // Note:
     // // This implementation of recognizing the Ready-Pulse is not maximaly accurate.
     // // On high load the pulse would not be measured accurately.
@@ -144,9 +146,9 @@ async fn measure_ready_pulse(pin: &mut Input<'static>) {
 
     // Note: Busy-Waiting for more accuracy. TODO: Better solution.
     info!("waiting for ready-pulse...");
-    while pin.is_high() {}
+    while l6360.hw.out_cq() == l6360::PinState::High {}
     let start = Instant::now();
-    while pin.is_low() {}
+    while l6360.hw.out_cq() == l6360::PinState::Low {}
     let end = Instant::now();
     info!("ready-pulse received");
 

@@ -13,19 +13,19 @@ use embassy_stm32::time::Hertz;
 use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
 
-use l6360::{self, L6360};
+use l6360::{self, L6360, HardwareAccess};
 use iol::master;
 
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-mod l6360_uart;
-use l6360_uart::L6360_Uart;
+mod l6360_hw;
+use l6360_hw::L6360_HW;
 
 mod master_actions;
 use master_actions::MasterActions;
 
-static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_Uart, Output>>> = Mutex::new(None);
+static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_HW>>> = Mutex::new(None);
 
 #[main]
 async fn main(spawner: Spawner) {
@@ -41,7 +41,7 @@ async fn main(spawner: Spawner) {
     iol_transceiver.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
 
     // power the connected iol-device
-    iol_transceiver.pins.enl_plus.set_high();
+    iol_transceiver.hw.enl_plus(l6360::PinState::High);
     //spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
     drop(iol_transceiver_ref);
 
@@ -107,11 +107,7 @@ async fn setup_hardware(spawner: Spawner) {
         },
     );
 
-    let uart = L6360_Uart::new(p.USART1, p.PA9, p.PA10, p.PC0);
-
-    let pins = l6360::Pins {
-        enl_plus: Output::new(p.PA6, Level::Low, Speed::Low),
-    };
+    let l6360_hw = L6360_HW::new(p.USART1, p.PA9, p.PA10, p.PA6, p.PC0);
 
     let config = l6360::Config {
         control_register_1: l6360::ControlRegister1 {
@@ -119,5 +115,5 @@ async fn setup_hardware(spawner: Spawner) {
         }
     };
 
-    *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, uart, 0b1100_000, pins, config).unwrap());
+    *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, l6360_hw, 0b1100_000, config).unwrap());
 }
