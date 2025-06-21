@@ -1,29 +1,33 @@
 // see #5.3.3.3
 
-// #[cfg(feature = "log")]
-// use log::info;
-// #[cfg(feature = "defmt")]
-// use defmt::info;
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
 
 pub use embedded_hal::digital::PinState;
 
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-pub enum Service<'a> {
+pub enum Service {
     //PL_SetMode,
     #[allow(non_camel_case_types)]
     PL_WakeUp,
     #[allow(non_camel_case_types)]
-    PL_Transfer{data: &'a [u8], answer: &'a mut [u8]},
+    PL_Transfer {
+        data: [u8; 32],
+        data_length: usize,
+        answer_length: usize
+    },
 }
 
 #[derive(PartialEq, Debug)]
-pub enum ServiceResult<'a> {
+pub enum ServiceResult {
     #[allow(non_camel_case_types)]
     PL_WakeUp,
     #[allow(non_camel_case_types)]
-    PL_Transfer{answer: &'a [u8]},
+    PL_Transfer{ answer: [u8; 32] },
 }
 
 pub enum CqOutputState {
@@ -66,7 +70,7 @@ impl<A: Actions> PL<A> {
         loop {
             match SERVICE_CHANNEL.receive().await {
                 Service::PL_WakeUp => self.wake_up().await,
-                Service::PL_Transfer { data, answer } => { self.transfer(data, answer).await; }
+                Service::PL_Transfer { data, data_length, answer_length } => { self.transfer(&data[0..data_length], answer_length).await; }
             }
         }
     }
@@ -92,8 +96,11 @@ impl<A: Actions> PL<A> {
         RESULT_CHANNEL.send(ServiceResult::PL_WakeUp).await;
     }
 
-    pub async fn transfer(&mut self, data: &[u8], answer: &'static mut [u8]) {
-        let _result = self.actions.exchange_data(data, answer).await; //TODO: implement
+    pub async fn transfer(&mut self, data: &[u8], answer_length: usize) {
+        let mut answer = [0u8; 32];
+        self.actions.cq_output(CqOutputState::Enable).await;
+        self.actions.exchange_data(data, &mut answer[0..answer_length]).await;
+        info!("reading done");
         RESULT_CHANNEL.send(ServiceResult::PL_Transfer { answer }).await;
     }
 }

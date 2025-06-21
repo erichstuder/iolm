@@ -107,11 +107,10 @@ async fn setup_hardware(spawner: Spawner) {
         },
     );
 
-    let uart = L6360_Uart::new(p.USART1, p.PA9, p.PA10);
+    let uart = L6360_Uart::new(p.USART1, p.PA9, p.PA10, p.PC0);
 
     let pins = l6360::Pins {
         enl_plus: Output::new(p.PA6, Level::Low, Speed::Low),
-        en_cq: Output::new(p.PC0, Level::Low, Speed::Low),
     };
 
     let config = l6360::Config {

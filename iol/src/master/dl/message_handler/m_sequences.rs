@@ -21,7 +21,11 @@ enum M_Sequence_Type{
 #[allow(non_camel_case_types)]
 pub struct M_Sequence<const SEND_ON_REQUEST_DATA: bool, const M: usize, const D: usize> {
     pub master_message: [u8; M],
-    pub device_message: [u8; D],
+    pub answer_length: usize,
+}
+
+impl<const SEND_ON_REQUEST_DATA: bool, const M: usize, const D: usize> M_Sequence<SEND_ON_REQUEST_DATA, M, D> {
+    pub const ANSWER_LENGTH: usize = D;
 }
 
 #[allow(non_camel_case_types)]
@@ -35,11 +39,11 @@ impl TYPE_0<false> {
             annex_a::create_mc(RW::ReadAccess, communication_channel, address),
             annex_a::create_ckt_without_checksum(annex_a::M_Sequence_Type::Type_0),
         ];
-        annex_a::calculate_checksum(&mut master_message, 2);
+        annex_a::calculate_checksum(&mut master_message);
 
         Self {
             master_message,
-            device_message: [0;2],
+            answer_length: 2, //TODO: here D should be used somehow
         }
     }
 }
@@ -81,11 +85,11 @@ mod annex_a {
         (m_sequence_type as u8) << 6
     }
 
-    pub fn calculate_checksum(message: &mut [u8], size: usize) {
+    pub fn calculate_checksum(message: &mut [u8]) {
         const SEED: u8 = 0x52;
         let mut result = SEED;
-        for n in 0..size {
-            result ^= message[n];
+        for m in message.iter() {
+            result ^= *m;
         }
 
         let d7_8 = (result >> 7) & 1;

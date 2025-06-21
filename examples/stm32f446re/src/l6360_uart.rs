@@ -22,14 +22,15 @@ pub struct L6360_Uart<'a> {
     uart_instance: Option<peripherals::USART1>,
     tx_pin: Option<peripherals::PA9>,
     rx_pin: Option<peripherals::PA10>,
-    pub in_cq: Option<Output<'a>>, //TODO: rename
-    pub out_cq: Option<Input<'a>>, //TODO: rename
+    pub en_cq: Output<'a>,
+    pub in_cq: Option<Output<'a>>,
+    pub out_cq: Option<Input<'a>>,
     uart: Option<BufferedUart<'a>>,
     mode: Mode,
 }
 
 impl<'a> L6360_Uart<'a> {
-    pub fn new(uart_instance: peripherals::USART1, tx_pin: peripherals::PA9, rx_pin: peripherals::PA10) -> Self {
+    pub fn new(uart_instance: peripherals::USART1, tx_pin: peripherals::PA9, rx_pin: peripherals::PA10, en_cq: peripherals::PC0) -> Self {
         // Note: This struct uses unsafe to be able to switch between gpio and uart.
         #[allow(unsafe_code)]
         let tx_clone = unsafe { tx_pin.clone_unchecked() };
@@ -40,6 +41,7 @@ impl<'a> L6360_Uart<'a> {
             uart_instance: Some(uart_instance),
             tx_pin: Some(tx_pin),
             rx_pin: Some(rx_pin),
+            en_cq: Output::new(en_cq, Level::Low, Speed::Low),
             in_cq: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
             out_cq: Some(Input::new(rx_clone, Pull::None)),
             uart: None,
@@ -101,7 +103,9 @@ impl<'a> l6360::Uart for L6360_Uart<'a> {
 
     async fn exchange(&mut self, data: &[u8], answer: &mut [u8]) {
         let uart = self.uart.as_mut().unwrap();
-        let _ = uart.write_all(data).await.unwrap();
+        //self.en_cq.is_set_high();
+        uart.write_all(data).await.unwrap();
+        //self.en_cq.is_set_high();
         uart.read_exact(answer).await.unwrap();
     }
 }

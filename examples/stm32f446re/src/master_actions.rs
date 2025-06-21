@@ -31,11 +31,11 @@ impl master::Actions for MasterActions {
             match state {
                 master::CqOutputState::Disable => {
                     info!("disable cq output");
-                    l6360.pins.en_cq.set_low();
+                    l6360.uart.en_cq.set_low();
                 }
                 master::CqOutputState::Enable => {
                     info!("enable cq output");
-                    l6360.pins.en_cq.set_high();
+                    l6360.uart.en_cq.set_high();
                 }
             }
         }
@@ -115,7 +115,7 @@ impl master::Actions for MasterActions {
             if l6360.uart.get_mode() != l6360_uart::Mode::Uart {
                 l6360.uart.switch_to_uart();
             }
-            let _ = l6360.uart.exchange(data, answer); //TODO: set correct data
+            l6360.uart.exchange(data, answer).await;
         }
         else {
             crate::panic!("Lock to L6360 failed"); //TODO: why is crate:: necessary here?

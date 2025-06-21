@@ -7,8 +7,10 @@ use defmt::info;
 
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use crate::master::dl::message_handler::m_sequences;
 use crate::common::annex_b::direct_parameter_page_1_and_2::address;
+use crate::master::dl::message_handler::m_sequences;
+use crate::master::pl;
+
 enum State {
     #[allow(non_camel_case_types)]
     Inactive_0,
@@ -92,7 +94,26 @@ impl StateMachine {
                                 // A.1.2). Start timer with T M-sequence .
 
                                 let m_sequence = m_sequences::TYPE_0::new(m_sequences::CommunicationChannel::Page, address::MinCycleTime);
-                                //pl.PL_Transfer(m_sequence.master_message, m_sequence.device_message);
+
+                                pl::SERVICE_CHANNEL.send(
+                                    pl::Service::PL_Transfer {
+                                        data: {
+                                            let mut buf = [0u8; 32];
+                                            let msg = &m_sequence.master_message;
+                                            buf[..msg.len()].copy_from_slice(msg);
+                                            buf
+                                        },
+                                        data_length: m_sequence.master_message.len(),
+                                        answer_length: m_sequence.answer_length
+                                    }
+                                ).await;
+
+                                let _answer = pl::RESULT_CHANNEL.receive().await;
+                                // if let pl::ServiceResult::PL_Transfer { .. } = answer {
+                                //     for item in answer {
+                                //         info!("answer[{}]: {:?}", i, item);
+                                //     }
+                                // }
                             }
                         }
                     }

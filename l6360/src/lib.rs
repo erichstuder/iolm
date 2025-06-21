@@ -69,7 +69,6 @@ where
     OutputPinType: OutputPin,
 {
     pub enl_plus: OutputPinType,
-    pub en_cq: OutputPinType,
 }
 
 #[derive(Debug)]
