@@ -1,13 +1,13 @@
+use defmt::info;
 use embassy_stm32::bind_interrupts;
-use embassy_stm32::usart::{self, BufferedUart};
+use embassy_stm32::usart::{self, Uart};
 use embassy_stm32::peripherals;
 use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::Peripheral;
-use static_cell::StaticCell;
-use embedded_io_async::{Write, Read};
+use embassy_stm32::mode::Blocking;
 
 bind_interrupts!(struct UartIrqs {
-    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
+    USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
 
 #[derive(Copy, Clone, PartialEq)]
@@ -26,7 +26,7 @@ pub struct L6360_HW<'a> {
     en_cq: Output<'a>,
     in_cq: Option<Output<'a>>,
     out_cq: Option<Input<'a>>,
-    uart: Option<BufferedUart<'a>>,
+    uart: Option<Uart<'a, Blocking>>,
     mode: Mode,
 }
 
@@ -36,7 +36,7 @@ impl<'a> L6360_HW<'a> {
         tx_pin: peripherals::PA9,
         rx_pin: peripherals::PA10,
         enl_plus: peripherals::PA6,
-        en_cq: peripherals::PC0
+        en_cq: peripherals::PC0,
     ) -> Self {
         // Note: This struct uses unsafe to be able to switch between gpio and uart.
         #[allow(unsafe_code)]
@@ -62,11 +62,6 @@ impl<'a> L6360_HW<'a> {
         drop(self.in_cq.take());
         drop(self.out_cq.take());
 
-        static TX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
-        let tx_buf = TX_BUF.init([0u8; 100]);
-        static RX_BUF: StaticCell<[u8; 100]> = StaticCell::new();
-        let rx_buf = RX_BUF.init([0u8; 100]);
-
         let mut config = usart::Config::default();
         config.baudrate = 38_400; //TODO: COM2 for the moment but fix it!
         config.data_bits = usart::DataBits::DataBits8;
@@ -76,13 +71,10 @@ impl<'a> L6360_HW<'a> {
         config.assume_noise_free = false;
         config.rx_pull = Pull::None;
 
-        self.uart = Some(BufferedUart::new(
+        self.uart = Some(Uart::new_blocking(
             self.uart_instance.take().unwrap(),
-            UartIrqs,
             self.rx_pin.take().unwrap(),
             self.tx_pin.take().unwrap(),
-            tx_buf,
-            rx_buf,
             config,
         ).unwrap());
 
@@ -125,10 +117,15 @@ impl<'a> l6360::HardwareAccess for L6360_HW<'a> {
     }
 
     async fn exchange(&mut self, data: &[u8], answer: &mut [u8]) {
-        let uart = self.uart.as_mut().unwrap();
-        //self.en_cq.is_set_high();
-        uart.write_all(data).await.unwrap();
-        //self.en_cq.is_set_high();
-        uart.read_exact(answer).await.unwrap();
+        self.en_cq(l6360::PinState::High);
+        self.uart.as_mut().unwrap().blocking_write(data).unwrap();
+        self.uart.as_mut().unwrap().blocking_flush().unwrap();
+
+        self.en_cq(l6360::PinState::Low);
+        self.uart.as_mut().unwrap().blocking_read(answer).unwrap();
+
+        for byte in answer{
+            info!("answer: {:#04x}", byte);
+        }
     }
 }
