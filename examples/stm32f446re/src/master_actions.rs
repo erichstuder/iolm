@@ -1,7 +1,6 @@
 use defmt::*;
 use embassy_time::Timer;
 use embassy_time::Instant;
-use embassy_stm32::gpio::Input;
 use embassy_stm32::i2c::I2c;
 use embassy_stm32::mode::Async;
 
