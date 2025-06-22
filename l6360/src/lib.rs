@@ -1,3 +1,6 @@
+
+//! Driver for the ST L6360 IO-Link communication master transceiver IC
+
 #![cfg_attr(not(test), no_std)]
 
 #[cfg(test)]
@@ -12,6 +15,7 @@ use embedded_hal_async::i2c::{self, I2c};
 use num_enum::TryFromPrimitive;
 pub use embedded_hal::digital::PinState;
 
+/// Implementations for hardware access.
 #[cfg_attr(test, automock)]
 pub trait HardwareAccess {
     fn enl_plus(&mut self, level: PinState);
@@ -38,17 +42,22 @@ enum RegisterAddress {
     // Parity        = 0b1000,
 }
 
+/// Values for EN_CGQ of [`ControlRegister1`]
 #[derive(PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum EN_CGQ_CQ_PullDown {
+    /// Always OFF
     OFF,
+    /// ON if EN_C/Q = 0 and OFF if EN_C/Q = 1
     ON_IfEnCq0,
 }
 
+/// Configuration of Control register 1. See [`Config`]
 pub struct ControlRegister1 {
-    pub en_cgq_cq_pulldown: EN_CGQ_CQ_PullDown,
+    pub en_cgq_cq_pull_down: EN_CGQ_CQ_PullDown,
 }
 
+/// Configurations for the C/Q output stage.
 #[derive(Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 pub enum CqOutputStageConfiguration {
@@ -61,6 +70,7 @@ pub enum CqOutputStageConfiguration {
     HighSideON = 0b110,
 }
 
+/// Configuration
 pub struct Config {
     pub control_register_1: ControlRegister1,
 }
@@ -69,18 +79,20 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             control_register_1: ControlRegister1 {
-                en_cgq_cq_pulldown: EN_CGQ_CQ_PullDown::OFF
+                en_cgq_cq_pull_down: EN_CGQ_CQ_PullDown::OFF
             },
         }
     }
 }
 
+/// LEDs
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Led {
     LED1,
     LED2,
 }
 
+/// Error
 #[derive(Debug)]
 pub enum Error<I2cError> {
     Invalid7bitAddress,
@@ -90,8 +102,11 @@ pub enum Error<I2cError> {
 
 type L6360result<T, I2C> = Result<T, Error<<I2C as i2c::ErrorType>::Error>>;
 
+/// Struct for the L6360
+/// Use [`L6360::new`] to create an instance of this struct.
 pub struct L6360<I2C, HW> {
     i2c: I2C,
+    /// Hardware can be accessed via this field containig the concrete implementations.
     pub hw: HW,
     address_7bit: i2c::SevenBitAddress,
     config: Config,
@@ -102,6 +117,18 @@ where
     I2C: I2c,
     HW: HardwareAccess,
 {
+    /// Creates a new instance of the L6360 driver.
+    ///
+    /// # Arguments
+    ///
+    /// * `i2c` - The I2C interface to communicate with the L6360.
+    /// * `hw` - The hardware access implementation to control the L6360.
+    /// * `address_7bit` - The 7-bit I2C address of the L6360. Via hardware pins the L6360 address is settable from `0b0_1100_000` to `0b0_1100_111`.
+    /// * `config` - The configuration for the L6360.
+    ///
+    /// # Returns
+    ///
+    /// A result containing the L6360 instance or an error.
     pub fn new(i2c: I2C, hw: HW, address_7bit: i2c::SevenBitAddress, config: Config) -> L6360result<Self, I2C> {
         if !(0b0_1100_000..=0b0_1100_111).contains(&address_7bit) {
             return Err(Error::Invalid7bitAddress);
@@ -115,13 +142,14 @@ where
         })
     }
 
+    /// Initializes the L6360.
     pub async fn init(&mut self) -> L6360result<(), I2C> {
         self.init_control_register_1().await?;
         Ok(())
     }
 
     async fn init_control_register_1(&mut self) -> L6360result<(), I2C> {
-        let data: u8 = if self.config.control_register_1.en_cgq_cq_pulldown == EN_CGQ_CQ_PullDown::ON_IfEnCq0 {
+        let data: u8 = if self.config.control_register_1.en_cgq_cq_pull_down == EN_CGQ_CQ_PullDown::ON_IfEnCq0 {
             0b1010_0001
         }
         else {
@@ -131,6 +159,7 @@ where
         Ok(())
     }
 
+    /// Sets the C/Q output stage configuration.
     pub async fn set_cq_out_stage_configuration(&mut self, config: CqOutputStageConfiguration) -> L6360result<(), I2C> {
         const CONF_REG_ADDR: u8 = RegisterAddress::Configuration as u8;
         const BIT_SHIFT: u8 = 5;
@@ -153,6 +182,18 @@ where
         Ok(())
     }
 
+    /// Sets a pattern for the specified Led.
+    ///
+    /// # Arguments
+    ///
+    /// * `led` - The [`Led`] to set the pattern for.
+    /// * `pattern` - A 16-bit pattern to set for the Led.
+    ///   The 16 bits are applied round robin with a rate of 63ms (16 * 63ms = 1008ms).
+    ///   The Led is on during 1 bits and off during 0 bits.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub async fn set_led_pattern(&mut self, led: Led, pattern: u16) -> L6360result<(), I2C>{
         let led_pattern_msb_lsb = [(pattern >> 8) as u8, pattern as u8];
 
@@ -259,7 +300,7 @@ mod tests {
             let i2c_address = 0b0_1100_111;
             let config = Config {
                 control_register_1: ControlRegister1 {
-                    en_cgq_cq_pulldown: *en_cgq_cq_pulldown
+                    en_cgq_cq_pull_down: *en_cgq_cq_pulldown
                 }
             };
 

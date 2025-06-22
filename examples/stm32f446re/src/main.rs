@@ -111,7 +111,7 @@ async fn setup_hardware(spawner: Spawner) {
 
     let config = l6360::Config {
         control_register_1: l6360::ControlRegister1 {
-            en_cgq_cq_pulldown: l6360::EN_CGQ_CQ_PullDown::ON_IfEnCq0,
+            en_cgq_cq_pull_down: l6360::EN_CGQ_CQ_PullDown::ON_IfEnCq0,
         }
     };
 
