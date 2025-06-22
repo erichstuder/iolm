@@ -247,9 +247,7 @@ mod tests {
                 }
             };
 
-            mock_i2c
-                .expect_write()
-                .times(1)
+            mock_i2c.expect_write().times(1)
                 .withf(move |address, bytes| {
                     *address == i2c_address &&
                     bytes.len() == 2 &&
@@ -368,9 +366,7 @@ mod tests {
             let mut mock_i2c = MockI2c::new();
             let mock_hw = MockHardwareAccess::new();
 
-            mock_i2c
-                .expect_write()
-                .times(1)
+            mock_i2c.expect_write().times(1)
                 .withf(move |address, bytes| {
                     *address == *i2c_address &&
                     bytes.len() == 2 &&
@@ -379,9 +375,7 @@ mod tests {
                 })
                 .returning(|_, _| Ok(()));
 
-            mock_i2c
-                .expect_write()
-                .times(1)
+            mock_i2c.expect_write().times(1)
                 .withf(move |address, bytes| {
                     *address == *i2c_address &&
                     bytes.len() == 2 &&
