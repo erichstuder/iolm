@@ -214,8 +214,8 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_new() {
+    #[test]
+    fn test_new() {
         for address in 0..=255 {
             let mock_i2c = MockI2c::new();
             let mock_hw = MockHardwareAccess::new();
