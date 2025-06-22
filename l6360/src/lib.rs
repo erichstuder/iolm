@@ -22,6 +22,22 @@ pub trait HardwareAccess {
     async fn exchange(&mut self, data: &[u8], answer: &mut [u8]);
 }
 
+enum RegisterAddress {
+    // Status        = 0b0000,
+    Configuration = 0b0001,
+    // Control1      = 0b0010,
+    // Control2      = 0b0011,
+    // #[allow(non_camel_case_types)]
+    // LED1_MSB      = 0b0100,
+    // #[allow(non_camel_case_types)]
+    // LED1_LSB      = 0b0101,
+    // #[allow(non_camel_case_types)]
+    // LED2_MSB      = 0b0110,
+    // #[allow(non_camel_case_types)]
+    // LED2_LSB      = 0b0111,
+    // Parity        = 0b1000,
+}
+
 #[derive(PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum EN_CGQ_CQ_PullDown {
@@ -116,9 +132,9 @@ where
     }
 
     pub async fn set_cq_out_stage_configuration(&mut self, config: CqOutputStageConfiguration) -> L6360result<(), I2C> {
-        const CONFIG_REGISTER_ADDRESS: u8 = 0b0001;
+        const CONF_REG_ADDR: u8 = RegisterAddress::Configuration as u8;
         const BIT_SHIFT: u8 = 5;
-        let current_register_value = self.read_register_random(CONFIG_REGISTER_ADDRESS).await.unwrap() >> BIT_SHIFT;
+        let current_register_value = self.read_register_random(CONF_REG_ADDR).await.unwrap() >> BIT_SHIFT;
         match CqOutputStageConfiguration::try_from(current_register_value).unwrap() {
             CqOutputStageConfiguration::OFF |
             CqOutputStageConfiguration::TriState => (),
@@ -128,12 +144,12 @@ where
             CqOutputStageConfiguration::PushPull |
             CqOutputStageConfiguration::LowSideON |
             CqOutputStageConfiguration::HighSideON => {
-                self.write_register(CONFIG_REGISTER_ADDRESS, (CqOutputStageConfiguration::OFF as u8) << BIT_SHIFT).await?;
+                self.write_register(CONF_REG_ADDR, (CqOutputStageConfiguration::OFF as u8) << BIT_SHIFT).await?;
             }
         }
 
         let register_value = (config as u8) << BIT_SHIFT;
-        self.write_register(CONFIG_REGISTER_ADDRESS, register_value).await?;
+        self.write_register(CONF_REG_ADDR, register_value).await?;
         Ok(())
     }
 
