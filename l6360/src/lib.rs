@@ -214,44 +214,13 @@ mod tests {
         }
     }
 
-    mock! {
-        pub OutputPinType {}
-
-        impl digital::ErrorType for OutputPinType {
-            type Error = core::convert::Infallible;
-        }
-
-        impl OutputPin for OutputPinType {
-            fn set_low(&mut self) -> Result<(), <Self as digital::ErrorType>::Error>;
-            fn set_high(&mut self) -> Result<(), <Self as digital::ErrorType>::Error>;
-            fn set_state(&mut self, state: PinState) -> Result<(), <Self as digital::ErrorType>::Error>;
-        }
-    }
-
-    // mock! {
-    //     pub InputPinType {}
-
-    //     impl digital::ErrorType for InputPinType {
-    //         type Error = core::convert::Infallible;
-    //     }
-
-    //     impl InputPin for InputPinType {
-    //         fn is_high(&mut self) -> Result<bool, <Self as digital::ErrorType>::Error>;
-    //         fn is_low(&mut self) -> Result<bool, <Self as digital::ErrorType>::Error>;
-    //     }
-    // }
-
     #[tokio::test]
     async fn test_new() {
         for address in 0..=255 {
             let mock_i2c = MockI2c::new();
-            let mock_uart = MockUart::new();
-            let pins = Pins {
-                enl_plus: MockOutputPinType::new(),
-                en_cq: MockOutputPinType::new(),
-            };
+            let mock_hw = MockHardwareAccess::new();
             let config = Config::default();
-            let result = L6360::new(mock_i2c, mock_uart, address, pins, config);
+            let result = L6360::new(mock_i2c, mock_hw, address, config);
             if address < 0b0_1100_000 || address > 0b0_1100_111 {
                 assert!(result.is_err(), "L6360::new returned ok, with address: {:?}", address);
             }
@@ -271,12 +240,8 @@ mod tests {
 
         for (en_cgq_cq_pulldown, reg_value) in en_cgq_cq_pulldown.iter() {
             let mut mock_i2c = MockI2c::new();
-            let mock_uart = MockUart::new();
+            let mock_hw = MockHardwareAccess::new();
             let i2c_address = 0b0_1100_111;
-            let pins = Pins {
-                enl_plus: MockOutputPinType::new(),
-                en_cq: MockOutputPinType::new(),
-            };
             let config = Config {
                 control_register_1: ControlRegister1 {
                     en_cgq_cq_pulldown: *en_cgq_cq_pulldown
@@ -294,7 +259,7 @@ mod tests {
                 })
                 .returning(|_, _| Ok(()));
 
-            let mut l6360 = L6360::new(mock_i2c, mock_uart, i2c_address, pins, config).unwrap();
+            let mut l6360 = L6360::new(mock_i2c, mock_hw, i2c_address, config).unwrap();
             l6360.init().await.unwrap();
         }
 
@@ -320,11 +285,7 @@ mod tests {
             test_cnt += 1;
 
             let mut mock_i2c = MockI2c::new();
-            let mock_uart = MockUart::new();
-            let pins = Pins {
-                enl_plus: MockOutputPinType::new(),
-                en_cq: MockOutputPinType::new(),
-            };
+            let mock_hw = MockHardwareAccess::new();
 
             mock_i2c
                 .expect_write()
@@ -348,7 +309,7 @@ mod tests {
                 })
                 .returning(|_, _| Ok(()));
 
-            let mut l63601 = L6360::new(mock_i2c, mock_uart, *i2c_address, pins, Config::default()).unwrap();
+            let mut l63601 = L6360::new(mock_i2c, mock_hw, *i2c_address, Config::default()).unwrap();
             l63601.set_led_pattern(*led, *pattern).await.unwrap();
         }
     }
@@ -380,7 +341,7 @@ mod tests {
         println!("|:----------:|:--------:|");
         for (data, expected) in test_cases {
             println!("| 0b{:08b} |   0b{:03b}  |", data, expected);
-            assert_eq!(L6360::<MockI2c, MockUart, MockOutputPinType>::calculate_parity(*data), *expected);
+            assert_eq!(L6360::<MockI2c, MockHardwareAccess>::calculate_parity(*data), *expected);
         }
     }
 }
