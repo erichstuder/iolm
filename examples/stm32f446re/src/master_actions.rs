@@ -42,17 +42,17 @@ impl master::Actions for MasterActions {
         }
     }
 
-    async fn get_cq(&self) -> master::PinState {
-        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
-            // Note: For a reason I don't understand yet, embassy does not use PinState.
-            // Note: The l6360 inverts the state of C/Q.
-            match l6360.hw.out_cq() {
-                l6360::PinState::High => return master::PinState::Low,
-                l6360::PinState::Low => return master::PinState::High,
-            }
-        }
-        crate::panic!("couldn't access L6360");
-    }
+    // async fn get_cq(&self) -> master::PinState {
+    //     if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
+    //         // Note: For a reason I don't understand yet, embassy does not use PinState.
+    //         // Note: The l6360 inverts the state of C/Q.
+    //         match l6360.hw.out_cq() {
+    //             l6360::PinState::High => return master::PinState::Low,
+    //             l6360::PinState::Low => return master::PinState::High,
+    //         }
+    //     }
+    //     crate::panic!("couldn't access L6360");
+    // }
 
     async fn do_ready_pulse(&self) {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {

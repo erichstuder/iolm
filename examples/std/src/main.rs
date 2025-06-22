@@ -38,11 +38,6 @@ impl master::Actions for MasterActions {
         }
     }
 
-    async fn get_cq(&self) -> l6360::PinState {
-        info!("get cq");
-        l6360::PinState::Low
-    }
-
     async fn do_ready_pulse(&self) {
         info!("ready pulse done");
     }

@@ -43,9 +43,6 @@ pub trait Actions {
     async fn cq_output(&self, state: CqOutputState);
 
     #[allow(async_fn_in_trait)]
-    async fn get_cq(&self) -> PinState;
-
-    #[allow(async_fn_in_trait)]
     async fn do_ready_pulse(&self); //TODO: maybe this needs the information whether to do the pulse up or down. Or shall it be done there? Document it!
 
     #[allow(async_fn_in_trait)]

@@ -31,9 +31,6 @@ pub trait Actions {
     async fn cq_output(&self, state: CqOutputState);
 
     #[allow(async_fn_in_trait)]
-    async fn get_cq(&self) -> PinState;
-
-    #[allow(async_fn_in_trait)]
     async fn do_ready_pulse(&self);
 
     #[allow(async_fn_in_trait)]
@@ -65,10 +62,6 @@ impl<A: Actions> pl::Actions for PlActions<A> {
 
     async fn cq_output(&self, state: CqOutputState) {
         self.actions.cq_output(state).await;
-    }
-
-    async fn get_cq(&self) -> PinState {
-        self.actions.get_cq().await
     }
 
     async fn do_ready_pulse(&self) {
