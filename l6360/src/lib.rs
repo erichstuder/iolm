@@ -33,7 +33,7 @@ pub struct ControlRegister1 {
     pub en_cgq_cq_pulldown: EN_CGQ_CQ_PullDown,
 }
 
-#[derive(TryFromPrimitive)]
+#[derive(Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 pub enum CqOutputStageConfiguration {
     OFF        = 0b000,
@@ -128,7 +128,7 @@ where
             CqOutputStageConfiguration::PushPull |
             CqOutputStageConfiguration::LowSideON |
             CqOutputStageConfiguration::HighSideON => {
-                self.write_register(CONFIG_REGISTER_ADDRESS, CqOutputStageConfiguration::OFF as u8).await?;
+                self.write_register(CONFIG_REGISTER_ADDRESS, (CqOutputStageConfiguration::OFF as u8) << BIT_SHIFT).await?;
             }
         }
 
@@ -194,7 +194,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use embedded_hal::digital;
     use tokio;
     use mockall::*;
 
@@ -207,7 +206,7 @@ mod tests {
         }
 
         impl i2c::I2c for I2c {
-            // async fn read(&mut self, address: i2c::SevenBitAddress, buffer: &mut [u8]) -> Result<(), <Self as i2c::ErrorType>::Error>;
+            async fn read(&mut self, address: i2c::SevenBitAddress, buffer: &mut [u8]) -> Result<(), <Self as i2c::ErrorType>::Error>;
             async fn write(&mut self, address: i2c::SevenBitAddress, bytes: &[u8]) -> Result<(), <Self as i2c::ErrorType>::Error>;
             // async fn write_read(&mut self, address: i2c::SevenBitAddress, bytes: &[u8], buffer: &mut [u8]) -> Result<(), <Self as i2c::ErrorType>::Error>;
             async fn transaction<'a>(&mut self, address: i2c::SevenBitAddress, operations: &mut [i2c::Operation<'a>]) -> Result<(), <Self as i2c::ErrorType>::Error>;
@@ -264,6 +263,88 @@ mod tests {
         }
 
 
+    }
+
+    #[tokio::test]
+    async fn test_set_cq_out_stage_configuration() {
+        for current_config in [
+            CqOutputStageConfiguration::OFF,
+            CqOutputStageConfiguration::LowSide,
+            CqOutputStageConfiguration::HighSide,
+            CqOutputStageConfiguration::PushPull,
+            CqOutputStageConfiguration::TriState,
+            CqOutputStageConfiguration::LowSideON,
+            CqOutputStageConfiguration::HighSideON,
+        ]
+        {
+            for new_config in [
+                CqOutputStageConfiguration::OFF,
+                CqOutputStageConfiguration::LowSide,
+                CqOutputStageConfiguration::HighSide,
+                CqOutputStageConfiguration::PushPull,
+                CqOutputStageConfiguration::TriState,
+                CqOutputStageConfiguration::LowSideON,
+                CqOutputStageConfiguration::HighSideON,
+            ]
+            {
+                let mut mock_i2c = MockI2c::new();
+                let mock_hw = MockHardwareAccess::new();
+                let i2c_address = 0b0_1100_111;
+
+                // expect set of start register address
+                mock_i2c.expect_write().times(1)
+                    .withf(move |address, bytes| {
+                        *address == i2c_address &&
+                        bytes.len() == 1 &&
+                        bytes[0] == 0b0001
+                    })
+                    .returning(|_, _| Ok(()));
+
+                // expect reading of current config
+                mock_i2c.expect_read().times(1)
+                    .withf(move |address, _| {
+                        *address == i2c_address
+                    })
+                    .returning(move |_, bytes| {
+                        bytes.copy_from_slice(&[(current_config as u8) << 5]);
+                        Ok(())
+                    });
+
+                match current_config {
+                    // Note: List all values here so we can be sure that all values are tested.
+                    CqOutputStageConfiguration::OFF |
+                    CqOutputStageConfiguration::TriState => (),
+                    // On some values we need to transit via OFF config.
+                    CqOutputStageConfiguration::LowSide |
+                    CqOutputStageConfiguration::HighSide |
+                    CqOutputStageConfiguration::PushPull |
+                    CqOutputStageConfiguration::LowSideON |
+                    CqOutputStageConfiguration::HighSideON => {
+                        mock_i2c
+                            .expect_write()
+                            .times(1)
+                            .withf(move |address, bytes| {
+                                *address == i2c_address &&
+                                bytes.len() == 2 &&
+                                bytes[0] == (CqOutputStageConfiguration::OFF as u8) << 5
+                            })
+                            .returning(|_, _| Ok(()));
+                    }
+                }
+
+                // expect writing to the final config
+                mock_i2c.expect_write().times(1)
+                    .withf(move |address, bytes| {
+                        *address == i2c_address &&
+                        bytes.len() == 2 &&
+                        bytes[0] == (new_config as u8) << 5
+                    })
+                    .returning(|_, _| Ok(()));
+
+                let mut l6360 = L6360::new(mock_i2c, mock_hw, i2c_address, Config::default()).unwrap();
+                l6360.set_cq_out_stage_configuration(new_config).await.unwrap();
+            }
+        }
     }
 
     #[tokio::test]
