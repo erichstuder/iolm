@@ -22,8 +22,8 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 mod l6360_hw;
 use l6360_hw::L6360_HW;
 
-mod master_actions;
-use master_actions::MasterActions;
+mod iol_master_actions;
+use iol_master_actions::MasterActions;
 
 static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_HW>>> = Mutex::new(None);
 
