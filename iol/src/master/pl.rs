@@ -30,9 +30,9 @@ pub enum ServiceResult {
     PL_Transfer{ answer: [u8; 32] },
 }
 
-pub enum CqOutputState {
-    Disable,
-    Enable,
+pub enum WakeUpPulseDirection {
+    Up,
+    Down,
 }
 
 pub trait Actions {
@@ -40,10 +40,10 @@ pub trait Actions {
     async fn wait_us(&self, duration: u64);
 
     #[allow(async_fn_in_trait)]
-    async fn cq_output(&self, state: CqOutputState);
+    async fn get_cq(&self) -> PinState;
 
     #[allow(async_fn_in_trait)]
-    async fn do_ready_pulse(&self); //TODO: maybe this needs the information whether to do the pulse up or down. Or shall it be done there? Document it!
+    async fn wake_up_pulse(&self, direction: WakeUpPulseDirection);
 
     #[allow(async_fn_in_trait)]
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
@@ -78,15 +78,12 @@ impl<A: Actions> PL<A> {
         #[allow(non_upper_case_globals)]
         const T_REN_us: u64 = 500;
 
-        self.actions.cq_output(CqOutputState::Disable).await; // TODO: is it necessary to first disable the output? To read input safely and also to prevent damage.
-        self.actions.wait_us(10).await; // Typical value is 225ns.
-        //let cq_state = self.actions.get_cq().await; //TODO: this is currently not taken into account and the pulse always done upwards. Improve!
-        self.actions.cq_output(CqOutputState::Enable).await;
-        self.actions.wait_us(10).await; // Typical value is 225ns.
+        let wake_up_pulse_direction = match self.actions.get_cq().await {
+            PinState::Low => WakeUpPulseDirection::Up,
+            PinState::High => WakeUpPulseDirection::Down,
+        };
 
-        self.actions.do_ready_pulse().await;
-
-        self.actions.cq_output(CqOutputState::Disable).await;
+        self.actions.wake_up_pulse(wake_up_pulse_direction).await;
 
         self.actions.wait_us(T_REN_us - T_WU_us).await;
 
@@ -95,7 +92,6 @@ impl<A: Actions> PL<A> {
 
     pub async fn transfer(&mut self, data: &[u8], answer_length: usize) {
         let mut answer = [0u8; 32];
-        self.actions.cq_output(CqOutputState::Enable).await;
         self.actions.exchange_data(data, &mut answer[0..answer_length]).await;
         info!("reading done");
         RESULT_CHANNEL.send(ServiceResult::PL_Transfer { answer }).await;

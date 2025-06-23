@@ -42,6 +42,23 @@ enum RegisterAddress {
     // Parity        = 0b1000,
 }
 
+/// Configurations for the C/Q output stage.
+#[derive(Copy, Clone, TryFromPrimitive)]
+#[repr(u8)]
+pub enum CqOutputStageConfiguration {
+    OFF        = 0b000,
+    LowSide    = 0b001,
+    HighSide   = 0b010,
+    PushPull   = 0b011,
+    TriState   = 0b100,
+    LowSideON  = 0b101,
+    HighSideON = 0b110,
+}
+
+pub struct ConfigurationRegister {
+    pub cq_output_stage_configuration: CqOutputStageConfiguration,
+}
+
 /// Values for EN_CGQ of [`ControlRegister1`]
 #[derive(PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
@@ -57,29 +74,20 @@ pub struct ControlRegister1 {
     pub en_cgq_cq_pull_down: EN_CGQ_CQ_PullDown,
 }
 
-/// Configurations for the C/Q output stage.
-#[derive(Copy, Clone, TryFromPrimitive)]
-#[repr(u8)]
-pub enum CqOutputStageConfiguration {
-    OFF        = 0b000,
-    LowSide    = 0b001,
-    HighSide   = 0b010,
-    PushPull   = 0b011,
-    TriState   = 0b100,
-    LowSideON  = 0b101,
-    HighSideON = 0b110,
-}
-
 /// Configuration
 pub struct Config {
+    pub configuration_register: ConfigurationRegister,
     pub control_register_1: ControlRegister1,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            configuration_register: ConfigurationRegister {
+                cq_output_stage_configuration: CqOutputStageConfiguration::TriState,
+            },
             control_register_1: ControlRegister1 {
-                en_cgq_cq_pull_down: EN_CGQ_CQ_PullDown::OFF
+                en_cgq_cq_pull_down: EN_CGQ_CQ_PullDown::OFF,
             },
         }
     }
@@ -144,6 +152,7 @@ where
 
     /// Initializes the L6360.
     pub async fn init(&mut self) -> L6360result<(), I2C> {
+        self.set_cq_out_stage_configuration(self.config.configuration_register.cq_output_stage_configuration).await?;
         self.init_control_register_1().await?;
         Ok(())
     }

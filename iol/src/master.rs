@@ -12,12 +12,12 @@ pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<
 
 mod pl;
 use pl::PL;
-pub use pl::CqOutputState as CqOutputState;
-pub use pl::PinState as PinState;
+pub use pl::WakeUpPulseDirection;
+pub use pl::PinState;
 
 mod dl;
 use dl::DL;
-pub use dl::ReadyPulseResult as ReadyPulseResult;
+pub use dl::ReadyPulseResult;
 pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<A>>;
 
 pub trait Actions {
@@ -28,10 +28,10 @@ pub trait Actions {
     async fn wait_ms(&self, duration: u64);
 
     #[allow(async_fn_in_trait)]
-    async fn cq_output(&self, state: CqOutputState);
+    async fn get_cq(&self) -> PinState;
 
     #[allow(async_fn_in_trait)]
-    async fn do_ready_pulse(&self);
+    async fn wake_up_pulse(&self, direction: WakeUpPulseDirection);
 
     #[allow(async_fn_in_trait)]
     async fn port_power_on(&self);
@@ -60,12 +60,12 @@ impl<A: Actions> pl::Actions for PlActions<A> {
         self.actions.wait_us(duration).await;
     }
 
-    async fn cq_output(&self, state: CqOutputState) {
-        self.actions.cq_output(state).await;
+    async fn get_cq(&self) -> PinState {
+        self.actions.get_cq().await
     }
 
-    async fn do_ready_pulse(&self) {
-        self.actions.do_ready_pulse().await
+    async fn wake_up_pulse(&self, direction: WakeUpPulseDirection) {
+        self.actions.wake_up_pulse(direction).await
     }
 
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {

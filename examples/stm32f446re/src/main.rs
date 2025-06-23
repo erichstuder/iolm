@@ -110,6 +110,9 @@ async fn setup_hardware(spawner: Spawner) {
     let l6360_hw = L6360_HW::new(p.USART1, p.PA9, p.PA10, p.PA6, p.PC0);
 
     let config = l6360::Config {
+        configuration_register: l6360::ConfigurationRegister {
+            cq_output_stage_configuration: l6360::CqOutputStageConfiguration::PushPull,
+        },
         control_register_1: l6360::ControlRegister1 {
             en_cgq_cq_pull_down: l6360::EN_CGQ_CQ_PullDown::ON_IfEnCq0,
         }

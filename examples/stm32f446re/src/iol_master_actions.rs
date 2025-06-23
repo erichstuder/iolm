@@ -22,41 +22,56 @@ impl master::Actions for MasterActions {
         Timer::after_millis(duration).await;
     }
 
-    // Note: This function should haven another name, so it is clear what exactly the output stage shall be configured to.
-    async fn cq_output(&self, state: master::CqOutputState) {
+    async fn get_cq(&self) -> l6360::PinState {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
+            l6360.hw.en_cq(l6360::PinState::Low);
+            Timer::after_nanos(500).await; // Typical value is 225ns.
 
-            l6360.hw.in_cq(l6360::PinState::High); // TODO: Note: so the output stays low. Think where to do it.
-            let _ = l6360.set_cq_out_stage_configuration(l6360::CqOutputStageConfiguration::PushPull).await; //TODO: set to the correct value
-
-            match state {
-                master::CqOutputState::Disable => {
-                    info!("disable cq output");
-                    l6360.hw.en_cq(l6360::PinState::Low);
-                }
-                master::CqOutputState::Enable => {
-                    info!("enable cq output");
-                    l6360.hw.en_cq(l6360::PinState::High);
-                }
+            // The L6360 inverts the pin value
+            match l6360.hw.out_cq() {
+                l6360::PinState::Low => l6360::PinState::High,
+                l6360::PinState::High => l6360::PinState::Low,
             }
+        }
+        else {
+            crate::panic!("Lock to L6360 failed");
         }
     }
 
-    async fn do_ready_pulse(&self) {
+    async fn wake_up_pulse(&self, direction: master::WakeUpPulseDirection) {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
-            // Note: The l6360 inverts the state of C/Q.
-            l6360.hw.in_cq(l6360::PinState::Low);
-
-            // Busy waiting as we have to be very fast. This could be done nicer.
-            let mut count = 0;
-            while count < 36 {
-                count += 1;
+            fn wait_blocking() {
+                // Busy waiting as we have to be very fast. This could be done nicer.
+                let mut count = 0;
+                while count < 35 {
+                    count += 1;
+                }
             }
 
-            l6360.hw.in_cq(l6360::PinState::High);
-            return;
+            // Note: The l6360 inverts the state of C/Q.
+            // Execution:
+            // - set cq value
+            // - enable cq stage
+            // - wait
+            // - reset cq value
+            match direction {
+                master::WakeUpPulseDirection::Up => {
+                    l6360.hw.in_cq(l6360::PinState::Low);
+                    l6360.hw.en_cq(l6360::PinState::High);
+                    wait_blocking();
+                    l6360.hw.in_cq(l6360::PinState::High);
+                }
+                master::WakeUpPulseDirection::Down => {
+                    l6360.hw.in_cq(l6360::PinState::High);
+                    l6360.hw.en_cq(l6360::PinState::High);
+                    wait_blocking();
+                    l6360.hw.in_cq(l6360::PinState::Low);
+                }
+            }
         }
-        crate::panic!("couldn't access L6360");
+        else {
+            crate::panic!("Lock to L6360 failed");
+        }
     }
 
     async fn port_power_on(&self) {
