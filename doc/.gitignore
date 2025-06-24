@@ -1,0 +1,5 @@
+build/
+_build/
+.$*.drawio.bkp
+.$*.drawio.dtmp
+source/auto_generated/
