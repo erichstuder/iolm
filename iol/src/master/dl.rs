@@ -3,11 +3,13 @@
 // #[cfg(feature = "defmt")]
 // use defmt::info;
 
-use crate::master::pl::{self, PL};
+use futures;
 
 mod dl_mode_handler;
-pub type DlModeHandlerStateMachine<A, PlActions> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>, PlActions>;
+pub type DlModeHandlerStateMachine<A> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>;
 pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
+
+mod message_handler;
 
 
 pub enum Mode {
@@ -68,11 +70,7 @@ impl<A: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<A> {
     }
 }
 
-pub struct DL<A, PlActions>
-where
-    A: Actions,
-    PlActions: pl::Actions,
-{
+pub struct DL<A:Actions> {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
@@ -80,31 +78,28 @@ where
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 
     _actions: A, //unused at the moment, maybe later
-    phantom: core::marker::PhantomData<PlActions>,
+    dl_mode_handler: dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>,
+    message_handler: message_handler::MessageHandler,
 }
 
-impl<A, PlActions> DL<A, PlActions>
-where
-    A: Actions + Copy,
-    PlActions: pl::Actions,
-{
-    pub fn new(actions: A, pl: PL<PlActions>) -> (Self, DlModeHandlerStateMachine<A, PlActions>) {
-        (
-            Self{
-                _actions: actions,
-                phantom: core::marker::PhantomData::<PlActions>,
-            },
-            dl_mode_handler::StateMachine::new(
-                DlModeHandlerActionsImpl{
-                    actions,
-                },
-                pl,
-            ),
-        )
+impl<A: Actions + Copy> DL<A> {
+    pub fn new(actions: A) -> Self {
+        Self {
+            _actions: actions,
+            dl_mode_handler: dl_mode_handler::StateMachine::new(DlModeHandlerActionsImpl{ actions }),
+            message_handler: message_handler::MessageHandler::new(),
+        }
+    }
+
+    pub async fn run(&mut self) {
+        futures::join!(
+            self.dl_mode_handler.run(),
+            self.message_handler.run(),
+        );
     }
 
     #[allow(non_snake_case)]
-    pub async fn DL_SetMode(&mut self, mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
+    pub async fn DL_SetMode(mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
         // self.m_sequence_time = value_list.m_sequence_time;
         // self.m_sequence_type = value_list.m_sequence_type;
         // self.pd_input_length = value_list.pd_input_length;

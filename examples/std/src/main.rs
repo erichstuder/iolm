@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 use tokio::time::{sleep, Duration, timeout};
 use std::future::Future;
 use log::info;
@@ -36,11 +38,6 @@ impl master::Actions for MasterActions {
         }
     }
 
-    async fn get_cq(&self) -> l6360::PinState {
-        info!("get cq");
-        l6360::PinState::Low
-    }
-
     async fn do_ready_pulse(&self) {
         info!("ready pulse done");
     }
@@ -66,30 +63,20 @@ impl master::Actions for MasterActions {
     async fn await_ready_pulse_with_timeout_ms(&self, _duration: u64) -> master::ReadyPulseResult {
         master::ReadyPulseResult::ReadyPulseOk
     }
+
+    async fn exchange_data(&self, _data: &[u8], _answer: &mut [u8]) {}
 }
 
 async fn use_master() {
-    let (mut master, port_power_switching, dl) = master::Master::new(MasterActions);
-    tokio::spawn(run_port_power_switching(port_power_switching));
-    tokio::spawn(run_dl(dl));
+    let mut master = master::Master::new(MasterActions);
+    tokio::spawn(async move { master.run().await; });
 
     sleep(Duration::from_secs(2)).await;
 
-    master.dl_set_mode_startup().await;
+    master::Master::<MasterActions>::dl_set_mode_startup().await;
 
     sleep(Duration::from_secs(20)).await;
 }
-
-async fn run_port_power_switching(mut port_power_switching: master::PortPowerSwitchingStateMachine<MasterActions>) {
-    info!("run port power switching");
-    port_power_switching.run().await;
-}
-
-async fn run_dl(mut dl: master::DlModeHandlerStateMachine<MasterActions>) {
-    info!("run dl");
-    dl.run().await;
-}
-
 
 
 // #[derive(Copy, Clone)]

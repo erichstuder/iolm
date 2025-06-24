@@ -5,18 +5,20 @@ use log::info;
 #[cfg(feature = "defmt")]
 use defmt::info;
 
+use futures;
+
 mod port_power_switching;
 pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<PortPowerSwitchingActions<A>>;
 
 mod pl;
 use pl::PL;
-pub use pl::CqOutputState as CqOutputState;
-pub use pl::PinState as PinState;
+pub use pl::WakeUpPulseDirection;
+pub use pl::PinState;
 
 mod dl;
 use dl::DL;
-pub use dl::ReadyPulseResult as ReadyPulseResult;
-pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<A>, PlActions<A>>;
+pub use dl::ReadyPulseResult;
+pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<A>>;
 
 pub trait Actions {
     #[allow(async_fn_in_trait)]
@@ -26,13 +28,10 @@ pub trait Actions {
     async fn wait_ms(&self, duration: u64);
 
     #[allow(async_fn_in_trait)]
-    async fn cq_output(&self, state: CqOutputState);
-
-    #[allow(async_fn_in_trait)]
     async fn get_cq(&self) -> PinState;
 
     #[allow(async_fn_in_trait)]
-    async fn do_ready_pulse(&self);
+    async fn wake_up_pulse(&self, direction: WakeUpPulseDirection);
 
     #[allow(async_fn_in_trait)]
     async fn port_power_on(&self);
@@ -47,6 +46,9 @@ pub trait Actions {
 
     #[allow(async_fn_in_trait)]
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
+
+    #[allow(async_fn_in_trait)]
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
 }
 
 pub struct PlActions<A: Actions> {
@@ -58,16 +60,16 @@ impl<A: Actions> pl::Actions for PlActions<A> {
         self.actions.wait_us(duration).await;
     }
 
-    async fn cq_output(&self, state: CqOutputState) {
-        self.actions.cq_output(state).await;
-    }
-
     async fn get_cq(&self) -> PinState {
         self.actions.get_cq().await
     }
 
-    async fn do_ready_pulse(&self) {
-        self.actions.do_ready_pulse().await
+    async fn wake_up_pulse(&self, direction: WakeUpPulseDirection) {
+        self.actions.wake_up_pulse(direction).await
+    }
+
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
+        self.actions.exchange_data(data, answer).await;
     }
 }
 
@@ -116,27 +118,29 @@ impl<A: Actions> dl::Actions for DlActions<A> {
 
 pub struct Master<A: Actions> {
     _actions: A, //unused at the moment. maybe later.
-    dl: DL<DlActions<A>, PlActions<A>>,
+    pl: PL<PlActions<A>>,
+    dl: DL<DlActions<A>>,
+    port_power_switching: port_power_switching::StateMachine<PortPowerSwitchingActions<A>>,
 }
 
 impl<A: Actions + Copy> Master<A> {
-    pub fn new(actions: A) -> (Self, PortPowerSwitchingStateMachine<A>, DlModeHandlerStateMachine<A>) {
-        let port_power_switching_state_machine = port_power_switching::StateMachine::new(
+    pub fn new(actions: A) -> Self{
+        Self {
+            _actions: actions,
+            pl: PL::new(PlActions { actions }),
+            dl: DL::new(DlActions { actions }),
+            port_power_switching: port_power_switching::StateMachine::new(
                 PortPowerSwitchingActions { actions }
-            );
+            ),
+        }
+    }
 
-        let pl = PL::new(PlActions { actions });
-
-        let (dl, dl_mode_handler_state_machine) = DL::new(DlActions { actions }, pl);
-
-        (
-            Self {
-                _actions: actions,
-                dl,
-            },
-            port_power_switching_state_machine,
-            dl_mode_handler_state_machine,
-        )
+    pub async fn run(&mut self) {
+        futures::join!(
+            self.pl.run(),
+            self.dl.run(),
+            self.port_power_switching.run(),
+        );
     }
 
     //Some helper functions for the moment. They may be removed in the future.
@@ -156,7 +160,7 @@ impl<A: Actions + Copy> Master<A> {
     //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
     // }
 
-    pub async fn dl_set_mode_startup(&mut self) {
-        self.dl.DL_SetMode(dl::Mode::STARTUP).await.unwrap();
+    pub async fn dl_set_mode_startup() {
+        DL::<DlActions<A>>::DL_SetMode(dl::Mode::STARTUP).await.unwrap();
     }
 }
