@@ -1,0 +1,166 @@
+// see #11
+
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
+
+use futures;
+
+mod port_power_switching;
+pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<PortPowerSwitchingActions<A>>;
+
+mod pl;
+use pl::PL;
+pub use pl::WakeUpPulseDirection;
+pub use pl::PinState;
+
+mod dl;
+use dl::DL;
+pub use dl::ReadyPulseResult;
+pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<A>>;
+
+pub trait Actions {
+    #[allow(async_fn_in_trait)]
+    async fn wait_us(&self, duration: u64);
+
+    #[allow(async_fn_in_trait)]
+    async fn wait_ms(&self, duration: u64);
+
+    #[allow(async_fn_in_trait)]
+    async fn get_cq(&self) -> PinState;
+
+    #[allow(async_fn_in_trait)]
+    async fn wake_up_pulse(&self, direction: WakeUpPulseDirection);
+
+    #[allow(async_fn_in_trait)]
+    async fn port_power_on(&self);
+
+    #[allow(async_fn_in_trait)]
+    async fn port_power_off(&self);
+
+    #[allow(async_fn_in_trait)]
+    async fn await_event_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
+    where
+        F: core::future::Future<Output = T> + Send;
+
+    #[allow(async_fn_in_trait)]
+    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
+
+    #[allow(async_fn_in_trait)]
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
+}
+
+pub struct PlActions<A: Actions> {
+    actions: A,
+}
+
+impl<A: Actions> pl::Actions for PlActions<A> {
+    async fn wait_us(&self, duration: u64) {
+        self.actions.wait_us(duration).await;
+    }
+
+    async fn get_cq(&self) -> PinState {
+        self.actions.get_cq().await
+    }
+
+    async fn wake_up_pulse(&self, direction: WakeUpPulseDirection) {
+        self.actions.wake_up_pulse(direction).await
+    }
+
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
+        self.actions.exchange_data(data, answer).await;
+    }
+}
+
+pub struct PortPowerSwitchingActions<A: Actions> {
+    actions: A,
+}
+
+impl<A: Actions> port_power_switching::Actions for PortPowerSwitchingActions<A> {
+    async fn port_power_on(&self) {
+        self.actions.port_power_on().await;
+    }
+
+    async fn port_power_off(&self) {
+        self.actions.port_power_off().await;
+    }
+
+    async fn await_event_with_timeout_ms(&self, duration: u64) -> port_power_switching::Event {
+        match self.actions.await_event_with_timeout_ms(duration, port_power_switching::EVENT_CHANNEL.receive()).await {
+            Some(event) => event,
+            None => port_power_switching::Event::OffTimerElapsed,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct DlActions<A: Actions> {
+    actions: A,
+}
+
+impl<A: Actions> dl::Actions for DlActions<A> {
+    async fn wait_ms(&self, duration: u64) {
+        self.actions.wait_ms(duration).await;
+    }
+
+    async fn port_power_off_on_ms(&self, duration: u64) {
+        info!("port power off on");
+        port_power_switching::EVENT_CHANNEL.send(port_power_switching::Event::OneTimePowerOff(duration)).await;
+        port_power_switching::RESULT_CHANNEL.receive().await;
+        info!("port power off on: done");
+    }
+
+    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult {
+        self.actions.await_ready_pulse_with_timeout_ms(duration).await
+    }
+}
+
+pub struct Master<A: Actions> {
+    _actions: A, //unused at the moment. maybe later.
+    pl: PL<PlActions<A>>,
+    dl: DL<DlActions<A>>,
+    port_power_switching: port_power_switching::StateMachine<PortPowerSwitchingActions<A>>,
+}
+
+impl<A: Actions + Copy> Master<A> {
+    pub fn new(actions: A) -> Self{
+        Self {
+            _actions: actions,
+            pl: PL::new(PlActions { actions }),
+            dl: DL::new(DlActions { actions }),
+            port_power_switching: port_power_switching::StateMachine::new(
+                PortPowerSwitchingActions { actions }
+            ),
+        }
+    }
+
+    pub async fn run(&mut self) {
+        futures::join!(
+            self.pl.run(),
+            self.dl.run(),
+            self.port_power_switching.run(),
+        );
+    }
+
+    //Some helper functions for the moment. They may be removed in the future.
+
+    // pub async fn port_power_on(&self) {
+    //     PORT_POWER_SWITCHING_EVENT_CHANNEL.send(port_power_switching::Event::PortPowerOn).await;
+    //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
+    // }
+
+    // pub async fn port_power_off(&self) {
+    //     PORT_POWER_SWITCHING_EVENT_CHANNEL.send(port_power_switching::Event::PortPowerOff).await;
+    //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
+    // }
+
+    // pub async fn port_power_off_on(&self, duration: u64) {
+    //     PORT_POWER_SWITCHING_EVENT_CHANNEL.send(port_power_switching::Event::OneTimePowerOff(duration)).await;
+    //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
+    // }
+
+    pub async fn dl_set_mode_startup() {
+        DL::<DlActions<A>>::DL_SetMode(dl::Mode::STARTUP).await.unwrap();
+    }
+}
