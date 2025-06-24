@@ -14,4 +14,4 @@ jobs:
 
         -   uses: actions/checkout@v4
 
-        -   run: ./run.py --test --verbose --pseudo_tty_off
+        -   run: ./run.py --software --test --verbose --pseudo_tty_off
