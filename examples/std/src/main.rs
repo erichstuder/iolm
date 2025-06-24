@@ -31,14 +31,11 @@ impl master::Actions for MasterActions {
         sleep(Duration::from_millis(duration)).await;
     }
 
-    async fn cq_output(&self, state: master::CqOutputState) {
-        match state {
-            master::CqOutputState::Disable => info!("cq output disabled"),
-            master::CqOutputState::Enable => info!("cq output enabled"),
-        }
+    async fn get_cq(&self) -> l6360::PinState {
+        l6360::PinState::Low
     }
 
-    async fn do_ready_pulse(&self) {
+    async fn wake_up_pulse(&self, _direction: master::WakeUpPulseDirection) {
         info!("ready pulse done");
     }
 

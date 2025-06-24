@@ -169,7 +169,7 @@ where
     }
 
     /// Sets the C/Q output stage configuration.
-    pub async fn set_cq_out_stage_configuration(&mut self, config: CqOutputStageConfiguration) -> L6360result<(), I2C> {
+    async fn set_cq_out_stage_configuration(&mut self, config: CqOutputStageConfiguration) -> L6360result<(), I2C> {
         const CONF_REG_ADDR: u8 = RegisterAddress::Configuration as u8;
         const BIT_SHIFT: u8 = 5;
         let current_register_value = self.read_register_random(CONF_REG_ADDR).await.unwrap() >> BIT_SHIFT;
@@ -297,21 +297,27 @@ mod tests {
 
     #[tokio::test]
     async fn test_init() {
-        let en_cgq_cq_pulldown = &[
+        let expected = &[
             //setting                        //expectation
             (EN_CGQ_CQ_PullDown::OFF,        0b0010_0001),
             (EN_CGQ_CQ_PullDown::ON_IfEnCq0, 0b1010_0001),
         ];
 
-        for (en_cgq_cq_pulldown, reg_value) in en_cgq_cq_pulldown.iter() {
+        for (en_cgq_cq_pulldown, reg_value) in expected.iter() {
             let mut mock_i2c = MockI2c::new();
             let mock_hw = MockHardwareAccess::new();
             let i2c_address = 0b0_1100_111;
             let config = Config {
                 control_register_1: ControlRegister1 {
-                    en_cgq_cq_pull_down: *en_cgq_cq_pulldown
-                }
+                    en_cgq_cq_pull_down: *en_cgq_cq_pulldown,
+                },
+                ..Default::default()
             };
+
+            mock_i2c.expect_read().times(1)
+                .returning(|_, _| Ok(()));
+            mock_i2c.expect_write().times(2)
+                .returning(|_, _| Ok(()));
 
             mock_i2c.expect_write().times(1)
                 .withf(move |address, bytes| {
@@ -325,8 +331,6 @@ mod tests {
             let mut l6360 = L6360::new(mock_i2c, mock_hw, i2c_address, config).unwrap();
             l6360.init().await.unwrap();
         }
-
-
     }
 
     #[tokio::test]
