@@ -6,6 +6,8 @@ use defmt::info;
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
+use crate::master::pl::{self, PL};
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum State {
     #[allow(non_camel_case_types)]
@@ -66,20 +68,27 @@ enum Safety {
 }
 
 pub trait Actions {
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn wait_ms(&self, duration: u64);
-    #[allow(async_fn_in_trait)] //TODO: remove
+
+    #[allow(async_fn_in_trait)]
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
-    #[allow(async_fn_in_trait)] //TODO: remove
+
+    #[allow(async_fn_in_trait)]
     async fn port_power_off_on_ms(&self, duration: u64);
 }
 
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
 
-pub struct StateMachine<T: Actions> {
+pub struct StateMachine<A, PlActions>
+where
+    A: Actions,
+    PlActions: pl::Actions,
+{
     state: State,
-    actions: T,
+    actions: A,
+    pl: PL<PlActions>,
     retry: u8,
     #[cfg(feature = "iols")]
     safety: Safety,
@@ -89,11 +98,16 @@ pub struct StateMachine<T: Actions> {
     time_to_ready_ms: u64,
 }
 
-impl<T: Actions> StateMachine<T> {
-    pub fn new(actions: T) -> Self {
+impl<A, PlActions> StateMachine<A, PlActions>
+where
+    A: Actions,
+    PlActions: pl::Actions,
+{
+    pub fn new(actions: A, pl: PL<PlActions>) -> Self {
         Self {
             state: State::Idle_0,
             actions,
+            pl,
             retry: 0,
             #[cfg(feature = "iols")]
             safety: Safety::SafetyCom, //TODO: don't know yet where it will be set from.
@@ -137,6 +151,7 @@ impl<T: Actions> StateMachine<T> {
             },
             State::EstablishCom_1 => {
                 info!("EstablishCom_1");
+                self.pl.PL_WakeUp().await;
                 self.actions.wait_ms(3000).await;
             },
             #[cfg(feature = "iols")]

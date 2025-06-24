@@ -3,8 +3,7 @@
 
 use defmt::*;
 use embassy_executor::{Spawner, main, task};
-use embassy_stm32::gpio::{Output, Level, Speed, Pull};
-use embassy_stm32::exti::ExtiInput;
+use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::i2c::{self, I2c};
 use embassy_stm32::mode::Async;
 use embassy_stm32::bind_interrupts;
@@ -20,14 +19,66 @@ use iol::master;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-static L6360: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<'static, Async>, Output, ExtiInput>>> = Mutex::new(None);
+static L6360: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<'static, Async>, Output, Input>>> = Mutex::new(None);
 
 #[derive(Copy, Clone)]
 struct MasterActions;
 
 impl master::Actions for MasterActions {
+    async fn wait_us(&self, duration: u64) {
+        Timer::after_micros(duration).await;
+    }
+
     async fn wait_ms(&self, duration: u64) {
         Timer::after_millis(duration).await;
+    }
+
+    // Note: This function should haven another name, so it is clear what exactly the output stage shall be configured to.
+    async fn cq_output(&self, state: master::CqOutputState) {
+        if let Some(l6360) = L6360.lock().await.as_mut() {
+
+            l6360.pins.in_cq.set_level(Level::High); // TODO: Note: so the output stays low. Think where to do it.
+            let _ = l6360.set_cq_out_stage_configuration(l6360::CqOutputStageConfiguration::PushPull).await; //TODO: set to the correct value
+
+            match state {
+                master::CqOutputState::Disable => {
+                    info!("disable cq output");
+                    l6360.pins.en_cq.set_low();
+                }
+                master::CqOutputState::Enable => {
+                    info!("enable cq output");
+                    l6360.pins.en_cq.set_high();
+                }
+            }
+        }
+    }
+
+    async fn get_cq(&self) -> master::PinState {
+        if let Some(l6360) = L6360.lock().await.as_mut() {
+            // Note: For a reason I don't understand yet, embassy does not use PinState.
+            // Note: The l6360 inverts the state of C/Q.
+            match l6360.pins.out_cq.get_level() {
+                Level::High => return master::PinState::Low,
+                Level::Low => return master::PinState::High,
+            }
+        }
+        crate::panic!("couldn't access L6360");
+    }
+
+    async fn do_ready_pulse(&self) {
+        if let Some(l6360) = L6360.lock().await.as_mut() {
+            l6360.pins.in_cq.set_level(Level::Low);
+
+            // Busy waiting as we have to be very fast. This could be done nicer.
+            let mut count = 0;
+            while count < 32 {
+                count += 1;
+            }
+
+            l6360.pins.in_cq.set_level(Level::High);
+            return;
+        }
+        crate::panic!("couldn't access L6360");
     }
 
     async fn port_power_on(&self) {
@@ -104,7 +155,9 @@ async fn main(spawner: Spawner) {
 
     let pins = l6360::Pins {
         enl_plus: Output::new(peripherals.PA6, Level::Low, Speed::Low),
-        out_cq: ExtiInput::new(peripherals.PA10, peripherals.EXTI10, Pull::None),
+        en_cq: Output::new(peripherals.PC0, Level::Low, Speed::Low),
+        in_cq: Output::new(peripherals.PA9, Level::Low, Speed::Low),
+        out_cq: Input::new(peripherals.PA10, Pull::None),
     };
 
     let config = l6360::Config {
@@ -123,7 +176,6 @@ async fn main(spawner: Spawner) {
     l6360.pins.enl_plus.set_high();
     //spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
     drop(l6360_ref);
-
 
     let (mut master, port_power_switching, dl) = master::Master::new(MasterActions);
     spawner.spawn(run_port_power_switching(port_power_switching)).unwrap();
@@ -149,7 +201,7 @@ async fn run_dl(mut dl: master::DlModeHandlerStateMachine<MasterActions>) {
     dl.run().await;
 }
 
-async fn measure_ready_pulse(pin: &mut ExtiInput<'static>) {
+async fn measure_ready_pulse(pin: &mut Input<'static>) {
     // // Note:
     // // This implementation of recognizing the Ready-Pulse is not maximaly accurate.
     // // On high load the pulse would not be measured accurately.

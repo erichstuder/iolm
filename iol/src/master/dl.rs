@@ -3,8 +3,10 @@
 // #[cfg(feature = "defmt")]
 // use defmt::info;
 
-pub mod dl_mode_handler;
-pub type DlModeHandlerStateMachine<T> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<T>>;
+use crate::master::pl::{self, PL};
+
+mod dl_mode_handler;
+pub type DlModeHandlerStateMachine<A, PlActions> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>, PlActions>;
 pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
 
 
@@ -38,21 +40,21 @@ pub enum ErrorInfo {
 }
 
 pub trait Actions {
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn wait_ms(&self, duration: u64);
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn port_power_off_on_ms(&self, duration: u64);
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
 }
 
-pub struct DlModeHandlerActionsImpl<T: Actions>{
-    pub actions: T,
+pub struct DlModeHandlerActionsImpl<A: Actions>{
+    pub actions: A,
 }
 
-impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
+impl<A: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<A> {
     async fn wait_ms(&self, duration: u64) {
         self.actions.wait_ms(duration).await;
     }
@@ -66,26 +68,37 @@ impl<T: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<T> {
     }
 }
 
-pub struct DL<T: Actions> {
+pub struct DL<A, PlActions>
+where
+    A: Actions,
+    PlActions: pl::Actions,
+{
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
     // pd_input_length: PDInputLength,
     // pd_output_length: PDOutputLength,
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 
-    _actions: T //unused at the moment, maybe later
+    _actions: A, //unused at the moment, maybe later
+    phantom: core::marker::PhantomData<PlActions>,
 }
 
-impl<T: Actions + Copy> DL<T> {
-    pub fn new(actions: T) -> (Self, DlModeHandlerStateMachine<T>) {
+impl<A, PlActions> DL<A, PlActions>
+where
+    A: Actions + Copy,
+    PlActions: pl::Actions,
+{
+    pub fn new(actions: A, pl: PL<PlActions>) -> (Self, DlModeHandlerStateMachine<A, PlActions>) {
         (
             Self{
                 _actions: actions,
+                phantom: core::marker::PhantomData::<PlActions>,
             },
             dl_mode_handler::StateMachine::new(
                 DlModeHandlerActionsImpl{
                     actions,
-                }
+                },
+                pl,
             ),
         )
     }

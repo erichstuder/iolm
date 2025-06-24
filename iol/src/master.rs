@@ -6,37 +6,76 @@ use log::info;
 use defmt::info;
 
 mod port_power_switching;
-pub type PortPowerSwitchingStateMachine<T> = port_power_switching::StateMachine<PortPowerSwitchingActions<T>>;
+pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<PortPowerSwitchingActions<A>>;
+
+mod pl;
+use pl::PL;
+pub use pl::CqOutputState as CqOutputState;
+pub use pl::PinState as PinState;
 
 mod dl;
 use dl::DL;
-pub type DlModeHandlerStateMachine<T> = dl::DlModeHandlerStateMachine<DlActions<T>>;
 pub use dl::ReadyPulseResult as ReadyPulseResult;
+pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<A>, PlActions<A>>;
 
 pub trait Actions {
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
+    async fn wait_us(&self, duration: u64);
+
+    #[allow(async_fn_in_trait)]
     async fn wait_ms(&self, duration: u64);
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
+    async fn cq_output(&self, state: CqOutputState);
+
+    #[allow(async_fn_in_trait)]
+    async fn get_cq(&self) -> PinState;
+
+    #[allow(async_fn_in_trait)]
+    async fn do_ready_pulse(&self);
+
+    #[allow(async_fn_in_trait)]
     async fn port_power_on(&self);
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn port_power_off(&self);
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn await_event_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
     where
         F: core::future::Future<Output = T> + Send;
 
-    #[allow(async_fn_in_trait)] //TODO: remove
+    #[allow(async_fn_in_trait)]
     async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
 }
 
-pub struct PortPowerSwitchingActions<T: Actions> {
-    actions: T
+pub struct PlActions<A: Actions> {
+    actions: A,
 }
 
-impl<T: Actions> port_power_switching::Actions for PortPowerSwitchingActions<T> {
+impl<A: Actions> pl::Actions for PlActions<A> {
+    async fn wait_us(&self, duration: u64) {
+        self.actions.wait_us(duration).await;
+    }
+
+    async fn cq_output(&self, state: CqOutputState) {
+        self.actions.cq_output(state).await;
+    }
+
+    async fn get_cq(&self) -> PinState {
+        self.actions.get_cq().await
+    }
+
+    async fn do_ready_pulse(&self) {
+        self.actions.do_ready_pulse().await
+    }
+}
+
+pub struct PortPowerSwitchingActions<A: Actions> {
+    actions: A,
+}
+
+impl<A: Actions> port_power_switching::Actions for PortPowerSwitchingActions<A> {
     async fn port_power_on(&self) {
         self.actions.port_power_on().await;
     }
@@ -54,11 +93,11 @@ impl<T: Actions> port_power_switching::Actions for PortPowerSwitchingActions<T> 
 }
 
 #[derive(Copy, Clone)]
-pub struct DlActions<T: Actions> {
-    actions: T,
+pub struct DlActions<A: Actions> {
+    actions: A,
 }
 
-impl<T: Actions> dl::Actions for DlActions<T> {
+impl<A: Actions> dl::Actions for DlActions<A> {
     async fn wait_ms(&self, duration: u64) {
         self.actions.wait_ms(duration).await;
     }
@@ -75,17 +114,20 @@ impl<T: Actions> dl::Actions for DlActions<T> {
     }
 }
 
-pub struct Master<T: Actions> {
-    _actions: T, //unused at the moment. maybe later.
-    dl: DL<DlActions<T>>, //unused at the moment. maybe later.
+pub struct Master<A: Actions> {
+    _actions: A, //unused at the moment. maybe later.
+    dl: DL<DlActions<A>, PlActions<A>>,
 }
 
-impl<T: Actions + Copy> Master<T> {
-    pub fn new(actions: T) -> (Self, PortPowerSwitchingStateMachine<T>, DlModeHandlerStateMachine<T>) {
+impl<A: Actions + Copy> Master<A> {
+    pub fn new(actions: A) -> (Self, PortPowerSwitchingStateMachine<A>, DlModeHandlerStateMachine<A>) {
         let port_power_switching_state_machine = port_power_switching::StateMachine::new(
                 PortPowerSwitchingActions { actions }
             );
-        let (dl, dl_mode_handler_state_machine) = DL::new(DlActions { actions });
+
+        let pl = PL::new(PlActions { actions });
+
+        let (dl, dl_mode_handler_state_machine) = DL::new(DlActions { actions }, pl);
 
         (
             Self {
