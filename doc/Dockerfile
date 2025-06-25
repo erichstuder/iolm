@@ -35,9 +35,6 @@ RUN . $HOME/.cargo/env  && python3 -m pip install --verbose \
     sphinxcontrib-programoutput==0.18 \
     pyserial==3.5 \
     sphinx-rtd-theme==3.0.2\
-    # sphinxcontrib-rust==0.8.1 \
-    # sphinx-needs==4.1.0 \
-    # sphinx-gherkindoc==3.6.4 \
     setuptools==80.9.0 \
     pillow==11.2.1
 

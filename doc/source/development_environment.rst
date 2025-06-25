@@ -28,23 +28,9 @@ All necessary files can be created and edited with VS Code.
 
 configuration
 ^^^^^^^^^^^^^
-.. collapse:: configuration files of VS Code are found in the .vscode/ directory
-
-   .. literalinclude:: ../../.vscode/extensions.json
-      :caption: extensions.json
-      :language: json
-
-   .. literalinclude:: ../../.vscode/settings.json
-      :caption: settings.json
-      :language: json
-
 .. collapse:: devcontainer definitions are found in the .devcontainer/ directory
 
    .. literalinclude:: ../../.devcontainer/doc/devcontainer.json
-      :caption: devcontainer.json
-      :language: json
-
-   .. literalinclude:: ../../.devcontainer/features/devcontainer.json
       :caption: devcontainer.json
       :language: json
 
@@ -191,15 +177,6 @@ So, no installation by hand.
 .. raw:: html
 
    <br>
-
-other setups
-^^^^^^^^^^^^
-
-Other debugging setup might work as well but are not tested.
-
-`Cortex-Debug <https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug>`_ can also work with VS Code.
-
-Another very powerful tool **without** VS Code is `Ozone <https://www.segger.com/products/development-tools/ozone-j-link-debugger/>`_.
 
 .. _Scripts:
 
