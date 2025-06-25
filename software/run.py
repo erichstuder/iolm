@@ -29,8 +29,8 @@ if __name__ == "__main__":
 
     if ex.arguments.build:
         commands = (
-            'cd examples/stm32f446re && cargo build && cd - &&'
-            'cd examples/std && cargo build && cd -'
+            'cd examples/std && cargo build && cd - &&'
+            'cd examples/stm32f446re && cargo build && cd -'
         )
     elif ex.arguments.test:
         commands = (
@@ -41,6 +41,8 @@ if __name__ == "__main__":
         )
     elif ex.arguments.doc:
         commands = (
+            'cd examples/std && cargo doc --no-deps && cd - &&'
+            'cd examples/stm32f446re && cargo doc --no-deps && cd - &&'
             'cargo doc --manifest-path l6360/Cargo.toml --no-deps &&'
             'cargo doc --manifest-path iol/Cargo.toml --no-deps '
         )

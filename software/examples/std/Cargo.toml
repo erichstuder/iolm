@@ -1,5 +1,5 @@
 [package]
-name = "pc_example"
+name = "std"
 version = "0.0.0" # Versioning is done automatically. This is just a placeholder.
 edition = "2021"
 

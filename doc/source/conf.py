@@ -6,9 +6,9 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-import subprocess
 from sphinx.application import Sphinx
 import os
+import shutil
 
 project = 'iolm'
 copyright = '2025, erichstuder'
@@ -30,48 +30,30 @@ templates_path = ['_templates']
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'sphinx_rtd_theme'
+html_extra_path = ['./auto_generated']
 
 drawio_no_sandbox = True
 
-# def run_gherkindoc(app: Sphinx):
-#     features_dir = os.path.join(app.srcdir, 'auto_generated/features')
-#     subprocess.run(['sphinx-gherkindoc', '--raw-descriptions', '--doc-project', 'DOC_PROJECT', '../features', features_dir], check=True)
-#     subprocess.run(['rm', os.path.join(features_dir, 'gherkin.rst')], check=True) # Prevent unused sphinx file warning.
+def copy_cargo_doc(app: Sphinx):
+    # List of (source, destination) pairs
+    copy_pairs = [
+        ('../software/examples/std/target/doc',                               'auto_generated/cargo_doc/example_std'),
+        ('../software/examples/stm32f446re/target/thumbv7em-none-eabihf/doc', 'auto_generated/cargo_doc/example_stm32f446re'),
+        ('../software/iol/target/doc',                                        'auto_generated/cargo_doc/iol'),
+        ('../software/l6360/target/doc',                                      'auto_generated/cargo_doc/l6360'),
+    ]
 
-#     # Remove the '%' character from the beginning of lines in files in the source/auto_generated/features directory
-#     # This is a workaround for now as the parser removes all whitespaces from the beginning of lines which leads to invalid requirements.
-#     for root, _, files in os.walk(features_dir):
-#         for file in files:
-#             file_path = os.path.join(root, file)
-#             with open(file_path, 'r') as f:
-#                 lines = f.readlines()
-#             with open(file_path, 'w') as f:
-#                 for line in lines:
-#                     if line.startswith('%'):
-#                         f.write(line[1:])  # Remove the '%' character
-#                     else:
-#                         f.write(line)
+    cargo_doc_dir = os.path.join(app.srcdir, 'auto_generated', 'cargo_doc')
+    if os.path.exists(cargo_doc_dir):
+        shutil.rmtree(cargo_doc_dir)
 
-# def run_cargo_modules(app: Sphinx):
-#     software_dependencies_path = os.path.join(app.srcdir, 'auto_generated/software_dependencies.png')
-#     cargo_process = subprocess.Popen(['cargo', 'modules', 'dependencies', '--manifest-path', '../software/firmware',
-#                       '--no-externs', '--no-fns', '--no-owns', '--no-traits', '--no-types'], stdout=subprocess.PIPE)
-#     subprocess.run(['dot', '-Tpng', '-o', software_dependencies_path], stdin=cargo_process.stdout, check=True)
+    for src, dest in copy_pairs:
+        src_abs = os.path.abspath(src)
+        dest_abs = os.path.join(app.srcdir, dest)
+        if os.path.exists(src_abs):
+            shutil.copytree(src_abs, dest_abs)
+        else:
+            print(f"Warning: Source directory {src_abs} does not exist.")
 
-# def copy_unit_test_report(app: Sphinx):
-#     source_path = '../software/firmware/build/unit-test-report.txt'
-#     dest_path = os.path.join(app.srcdir, 'auto_generated/unit-test-report.txt')
-
-#     if os.path.exists(dest_path):
-#         os.remove(dest_path)
-
-#     try:
-#         subprocess.run(['cp', source_path, dest_path], check=True)
-#     except subprocess.CalledProcessError as e:
-#         print(f"Warning: Copy of {source_path} failed. Were the software tests already run?")
-#         print(f"Details: {e}\n")
-
-# def setup(app: Sphinx):
-    # app.connect("builder-inited", run_gherkindoc)
-    # app.connect("builder-inited", run_cargo_modules)
-    # app.connect("builder-inited", copy_unit_test_report)
+def setup(app: Sphinx):
+    app.connect("builder-inited", copy_cargo_doc)
