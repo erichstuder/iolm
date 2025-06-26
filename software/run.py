@@ -44,7 +44,7 @@ if __name__ == "__main__":
             'cd examples/std && cargo doc --no-deps && cd - &&'
             'cd examples/stm32f446re && cargo doc --no-deps && cd - &&'
             'cargo doc --manifest-path l6360/Cargo.toml --no-deps &&'
-            'cargo doc --manifest-path iol/Cargo.toml --no-deps '
+            'cargo doc --manifest-path iol/Cargo.toml --no-deps --document-private-items --features "master, defmt"'
         )
     else:
         commands = None
