@@ -17,16 +17,7 @@ WORKDIR /usr/drawio
 RUN wget https://github.com/jgraph/drawio-desktop/releases/download/v27.0.5/drawio-amd64-27.0.5.deb && \
     apt-get install -y ./drawio-amd64-27.0.5.deb
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs  | sh -s -- -y && \
-    . $HOME/.cargo/env && \
-    rustup install 1.86.0 && \
-    rustup default 1.86.0 && \
-    cargo install cargo-modules@0.24.2
-
-ENV PATH="/root/.cargo/bin:${PATH}"
-ENV CARGO_HOME="/root/.cargo"
-
-RUN . $HOME/.cargo/env  && python3 -m pip install --verbose \
+RUN python3 -m pip install --verbose \
     sphinx==8.2.3 \
     sphinx-autobuild==2024.10.3 \
     sphinxcontrib-drawio==0.0.17 \
