@@ -1,6 +1,10 @@
 Development Environment
 =======================
 
+.. contents::
+   :local:
+   :depth: 1
+
 The development environment uses **VS Code** as the editor.
 While this documentation only describes the use of VS Code, the project may be developed with any editor.
 
