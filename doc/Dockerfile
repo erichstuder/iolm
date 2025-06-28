@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
     # tig is great for viewing git history
     tig \
     # less is needed e.g. for 'git diff' to make the output scrollable
-    less
+    less \
+    graphviz
 
 WORKDIR /usr/drawio
 RUN wget https://github.com/jgraph/drawio-desktop/releases/download/v27.0.5/drawio-amd64-27.0.5.deb && \
@@ -27,7 +28,9 @@ RUN python3 -m pip install --verbose \
     pyserial==3.5 \
     sphinx-rtd-theme==3.0.2\
     setuptools==80.9.0 \
-    pillow==11.2.1
+    pillow==11.2.1 \
+    ansi2html==1.9.2 \
+    sphinxcontrib-images==1.0.1
 
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen

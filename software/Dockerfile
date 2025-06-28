@@ -16,7 +16,9 @@ RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/r
 # run this as sudo on the host machine to make st-link accessible
 # curl -o /etc/udev/rules.d/69-probe-rs.rules https://probe.rs/files/69-probe-rs.rules
 
-RUN cargo install cargo-tarpaulin@0.32.8
+RUN cargo install \
+    cargo-tarpaulin@0.32.8 \
+    cargo-modules@0.24.3
 
 RUN rustup target add thumbv7em-none-eabihf
 

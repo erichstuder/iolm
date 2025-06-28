@@ -9,6 +9,7 @@
 from sphinx.application import Sphinx
 import os
 import shutil
+import subprocess
 
 project = 'iolm'
 copyright = '2025, erichstuder'
@@ -22,6 +23,7 @@ extensions = [
     'sphinxcontrib.plantuml',
     'sphinx_toolbox.collapse',
     'sphinxcontrib.programoutput',
+    'sphinxcontrib.images',
 ]
 
 templates_path = ['_templates']
@@ -34,18 +36,17 @@ html_extra_path = ['./auto_generated']
 
 drawio_no_sandbox = True
 
-def copy_cargo_doc(app: Sphinx):
-    # List of (source, destination) pairs
+def copy_rust_documentations(app: Sphinx):
     copy_pairs = [
-        ('../software/examples/std/target/doc',                               'auto_generated/cargo_doc/example_std'),
-        ('../software/examples/stm32f446re/target/thumbv7em-none-eabihf/doc', 'auto_generated/cargo_doc/example_stm32f446re'),
-        ('../software/iol/target/doc',                                        'auto_generated/cargo_doc/iol'),
-        ('../software/l6360/target/doc',                                      'auto_generated/cargo_doc/l6360'),
+        ('../software/examples/std/target/doc',                               'auto_generated/rust_doc/example_std'),
+        ('../software/examples/stm32f446re/target/thumbv7em-none-eabihf/doc', 'auto_generated/rust_doc/example_stm32f446re'),
+        ('../software/iol/target/doc',                                        'auto_generated/rust_doc/iol'),
+        ('../software/l6360/target/doc',                                      'auto_generated/rust_doc/l6360'),
     ]
 
-    cargo_doc_dir = os.path.join(app.srcdir, 'auto_generated', 'cargo_doc')
-    if os.path.exists(cargo_doc_dir):
-        shutil.rmtree(cargo_doc_dir)
+    rust_doc_dir = os.path.join(app.srcdir, 'auto_generated', 'rust_doc')
+    if os.path.exists(rust_doc_dir):
+        shutil.rmtree(rust_doc_dir)
 
     for src, dest in copy_pairs:
         src_abs = os.path.abspath(src)
@@ -55,5 +56,20 @@ def copy_cargo_doc(app: Sphinx):
         else:
             print(f"Warning: Source directory {src_abs} does not exist.")
 
+def render_documenations(app: Sphinx):
+    dot_file = os.path.join(app.srcdir, "auto_generated", "rust_doc", "iol", "dependencies_owns.dot")
+    png_file = os.path.join(app.srcdir, "auto_generated", "rust_doc", "iol", "dependencies_owns.png")
+    subprocess.run(["dot", "-Tpng", "-o", png_file, dot_file], check=True)
+
+    dot_file = os.path.join(app.srcdir, "auto_generated", "rust_doc", "iol", "dependencies_uses.dot")
+    png_file = os.path.join(app.srcdir, "auto_generated", "rust_doc", "iol", "dependencies_uses.png")
+    subprocess.run(["dot", "-Tpng", "-o", png_file, dot_file], check=True)
+
+    txt_file = os.path.join(app.srcdir, "auto_generated", "rust_doc", "iol", "structure.txt")
+    html_file = os.path.join(app.srcdir, "auto_generated", "rust_doc", "iol", "structure.html")
+    with open(txt_file, "r") as fin, open(html_file, "w") as fout:
+        subprocess.run(["ansi2html"], stdin=fin, stdout=fout, check=True)
+
 def setup(app: Sphinx):
-    app.connect("builder-inited", copy_cargo_doc)
+    app.connect("builder-inited", copy_rust_documentations)
+    app.connect("builder-inited", render_documenations)

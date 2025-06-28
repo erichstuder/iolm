@@ -42,9 +42,21 @@ if __name__ == "__main__":
     elif ex.arguments.doc:
         commands = (
             'cd examples/std && cargo doc --no-deps && cd - &&'
+
             'cd examples/stm32f446re && cargo doc --no-deps && cd - &&'
+
             'cargo doc --manifest-path l6360/Cargo.toml --no-deps &&'
-            'cargo doc --manifest-path iol/Cargo.toml --no-deps --document-private-items --features "master, defmt"'
+
+            'cd iol &&'
+            'cargo doc --no-deps --document-private-items '
+                '--features "master, defmt" &&'
+            'cargo modules dependencies --no-externs --no-fns --no-owns --no-traits --no-types '
+                '--features "master, defmt" --layout neato > target/doc/dependencies_uses.dot &&'
+            'cargo modules dependencies --no-externs --no-fns --no-uses --no-traits --no-types '
+                '--features "master, defmt" --layout dot > target/doc/dependencies_owns.dot &&'
+            'cargo modules structure --no-fns --no-traits --no-types '
+                '--features "master, defmt" > target/doc/structure.txt &&'
+            'cd -'
         )
     else:
         commands = None
