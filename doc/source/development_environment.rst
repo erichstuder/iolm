@@ -19,7 +19,6 @@ The version of the tools is uncritical, as all the critical tools and dependenci
 
 - `Visual Studio Code (VS Code) <https://code.visualstudio.com/>`_
 - `Docker <https://www.docker.com/>`_
-- `Docker Compose <https://docs.docker.com/compose/>`_
 - `Python <https://www.python.org/>`_
 
 For Debugging there might be some more tools necessary. (see: :ref:`Debugging`)
