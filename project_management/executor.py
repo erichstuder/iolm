@@ -61,14 +61,17 @@ class Executor:
         env['UID'] = str(os.getuid())
 
         try:
-            subprocess.run(['docker-compose', '-f', yml_file_path, '-p', project, 'up', '--build', '--detach'], check=True, env=env)
+            subprocess.run(['docker', 'compose', '-f', yml_file_path, '-p', project, 'up', '--build', '--detach'], check=True, env=env)
 
-            exec_command = ['docker-compose', '-f', yml_file_path, '-p', project, 'exec']
+            exec_command = ['docker', 'compose', '-f', yml_file_path, '-p', project, 'exec']
             if self.arguments.pseudo_tty_off:
                 exec_command.append('-T')
             exec_command.append(service_name)
             exec_command.extend(docker_args)
-            subprocess.run(exec_command, check=True, env=env)
+            result = subprocess.run(exec_command, capture_output=True, text=True, env=env)
+            if result.returncode != 0:
+                print(f"Stderr: {result.stderr}", file=sys.stderr)
+                sys.exit(result.returncode)
 
         finally:
-            subprocess.run(["docker-compose", '-f', yml_file_path, '-p', project, "down"], check=True, env=env)
+            subprocess.run(['docker', 'compose', '-f', yml_file_path, '-p', project, 'down'], check=True, env=env)
