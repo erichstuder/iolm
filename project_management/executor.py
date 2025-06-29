@@ -54,7 +54,8 @@ class Executor:
     def _run_with_container(self, commands):
         docker_args = ['bash', '-c', 'set -e \n ' + commands]
         yml_file_path = self.work_dir + '/docker-compose.yml'
-        project = 'project_management'
+        directory = os.path.basename(self.work_dir)
+        project = 'project_management_' + directory
         service_name = 'main'
 
         env = os.environ.copy()
