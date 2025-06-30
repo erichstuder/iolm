@@ -43,6 +43,7 @@ def copy_rust_documentations(app: Sphinx):
         ('../software/examples/std/target/doc',                               'auto_generated/rust_doc/example_std'),
         ('../software/examples/stm32f446re/target/thumbv7em-none-eabihf/doc', 'auto_generated/rust_doc/example_stm32f446re'),
         ('../software/iol/target/doc',                                        'auto_generated/rust_doc/iol'),
+        ('../software/iol/spec',                                              'auto_generated/rust_doc/iol/iol/spec'),
         ('../software/l6360/target/doc',                                      'auto_generated/rust_doc/l6360'),
     ]
 
