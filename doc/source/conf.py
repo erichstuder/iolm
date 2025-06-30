@@ -34,6 +34,8 @@ templates_path = ['_templates']
 html_theme = 'sphinx_rtd_theme'
 html_extra_path = ['./auto_generated']
 
+# The default export format 'svg' produced images, that had black areas when used in the html.
+drawio_builder_export_format = {'html':'png'}
 drawio_no_sandbox = True
 
 def copy_rust_documentations(app: Sphinx):

@@ -7,11 +7,5 @@ jobs:
     build:
         runs-on: ubuntu-latest
         steps:
-        -   name: setup
-            run: |
-                sudo apt-get update
-                sudo apt-get install -y docker-compose
-
         -   uses: actions/checkout@v4
-
         -   run: ./run.py --software --test --verbose --pseudo_tty_off
