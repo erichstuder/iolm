@@ -1,4 +1,4 @@
-FROM python:3.14.0b3
+FROM python:3.13.5
 # Note: Can't use official sphinx image because drawio can't be installed from apt which causes problems.
 
 RUN apt-get update && apt-get install -y \
