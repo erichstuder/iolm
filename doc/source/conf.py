@@ -74,5 +74,9 @@ def render_documenations(app: Sphinx):
         subprocess.run(["ansi2html"], stdin=fin, stdout=fout, check=True)
 
 def setup(app: Sphinx):
+    # create folder early on to prevent warning
+    auto_gen_dir = os.path.join(app.srcdir, 'auto_generated')
+    os.makedirs(auto_gen_dir, exist_ok=True)
+
     app.connect("builder-inited", copy_rust_documentations)
     app.connect("builder-inited", render_documenations)
