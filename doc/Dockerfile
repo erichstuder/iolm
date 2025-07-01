@@ -35,11 +35,6 @@ RUN python3 -m pip install --verbose \
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen
 
-# Make newly created files world readable and writable.
-# This is needed e.g. when cleanup up the repository from outside the container by the host user.
-RUN echo "umask 0000" >> /root/.bashrc
-ENV BASH_ENV=/root/.bashrc
-
 ARG USER
 ARG UID
 RUN useradd -m -s /bin/bash -u ${UID:-2222} $USER
