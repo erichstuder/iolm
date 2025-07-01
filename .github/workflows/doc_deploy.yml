@@ -1,0 +1,38 @@
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+concurrency:
+    group: "pages"
+    cancel-in-progress: false
+
+jobs:
+    deploy:
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        runs-on: ubuntu-latest
+        steps:
+        -   name: checkout
+            uses: actions/checkout@v4
+
+        -   name: create documentation
+            uses: ./.github/workflows/doc_create.yml
+
+        -   name: setup pages
+            uses: actions/configure-pages@v5
+
+        -   name: upload pages artifact
+            uses: actions/upload-pages-artifact@v3
+            with:
+                path: 'doc/build/html'
+
+        -   name: deploy to GitHub pages
+            uses: actions/deploy-pages@v4

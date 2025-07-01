@@ -1,4 +1,4 @@
-// see #11.8
+//! see [#11.8](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=220)
 
 #[cfg(feature = "log")]
 use log::info;

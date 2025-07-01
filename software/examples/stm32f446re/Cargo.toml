@@ -1,5 +1,5 @@
 [package]
-name = "firmware"
+name = "stm32f446re"
 version = "0.0.0" # Versioning is done automatically. This is just a placeholder.
 edition = "2021"
 

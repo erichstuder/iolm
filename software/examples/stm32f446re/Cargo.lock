@@ -508,29 +508,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "firmware"
-version = "0.0.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "critical-section",
- "defmt 1.0.1",
- "defmt-rtt",
- "embassy-executor",
- "embassy-futures",
- "embassy-stm32",
- "embassy-sync 0.7.0",
- "embassy-time",
- "embedded-hal 1.0.0",
- "embedded-io-async",
- "iol",
- "l6360",
- "nb 1.1.0",
- "panic-probe",
- "static_cell",
-]
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -846,6 +823,29 @@ checksum = "dc520f60f6653a32479a95b9180b33908f0cbbdf106609465ee7dea98f4f5b37"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+]
+
+[[package]]
+name = "stm32f446re"
+version = "0.0.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "critical-section",
+ "defmt 1.0.1",
+ "defmt-rtt",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-stm32",
+ "embassy-sync 0.7.0",
+ "embassy-time",
+ "embedded-hal 1.0.0",
+ "embedded-io-async",
+ "iol",
+ "l6360",
+ "nb 1.1.0",
+ "panic-probe",
+ "static_cell",
 ]
 
 [[package]]
