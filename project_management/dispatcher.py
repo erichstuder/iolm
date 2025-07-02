@@ -41,7 +41,7 @@ class Dispatcher:
                     run_command([work_dir + '/' + self.scripts[key]] + script_args)
                     break
 
-        return work_dir
+        return 0
 
 
 def run_dispatcher(scripts, description=None):
