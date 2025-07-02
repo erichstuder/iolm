@@ -52,12 +52,14 @@ impl TYPE_0<false> {
 // TODO: move annex A to its own file?
 mod annex_a {
     pub enum RW {
-        // WriteAccess = 0,
+        #[allow(unused)] // TODO: remove
+        WriteAccess = 0,
         ReadAccess = 1,
     }
 
     pub enum CommunicationChannel {
-        // Process = 0,
+        #[allow(unused)] // TODO: remove
+        Process = 0,
         Page = 1,
         // Diagnosis = 2,
         // ISDU = 3,
