@@ -1,4 +1,6 @@
-// see #7.3.3
+//! State machine of the Master message handler
+//!
+//! see [#7.3.3](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=83)
 
 #[cfg(feature = "log")]
 use log::info;
