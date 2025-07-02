@@ -46,8 +46,8 @@ class Dispatcher:
 
 def run_dispatcher(scripts, description=None):
     dispatcher = Dispatcher(scripts, description)
-    dispatcher.parse_args()
-    exit(0)
+    return_code = dispatcher.parse_args()
+    exit(return_code)
 
 
 def run_command(command):
