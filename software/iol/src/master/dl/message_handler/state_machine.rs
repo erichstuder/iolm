@@ -15,8 +15,10 @@ enum State {
     #[allow(non_camel_case_types)]
     Inactive_0,
     #[allow(non_camel_case_types)]
+    #[allow(unused)] //TODO: remove
     AwaitReply_1,
     #[allow(non_camel_case_types)]
+    #[allow(unused)] //TODO: remove
     Startup_2,
     // Response_3,
     // AwaitReply_4,

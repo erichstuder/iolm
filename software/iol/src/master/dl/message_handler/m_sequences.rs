@@ -3,6 +3,7 @@
 pub use annex_a::{RW, CommunicationChannel};
 
 #[allow(non_camel_case_types)]
+#[allow(unused)] // TODO: remove
 enum M_Sequence_Type{
     #[allow(non_camel_case_types)]
     TYPE_0,
@@ -25,7 +26,7 @@ pub struct M_Sequence<const SEND_ON_REQUEST_DATA: bool, const M: usize, const D:
 }
 
 impl<const SEND_ON_REQUEST_DATA: bool, const M: usize, const D: usize> M_Sequence<SEND_ON_REQUEST_DATA, M, D> {
-    pub const ANSWER_LENGTH: usize = D;
+    // pub const ANSWER_LENGTH: usize = D;
 }
 
 #[allow(non_camel_case_types)]
@@ -51,15 +52,15 @@ impl TYPE_0<false> {
 // TODO: move annex A to its own file?
 mod annex_a {
     pub enum RW {
-        WriteAccess = 0,
+        // WriteAccess = 0,
         ReadAccess = 1,
     }
 
     pub enum CommunicationChannel {
-        Process = 0,
+        // Process = 0,
         Page = 1,
-        Diagnosis = 2,
-        ISDU = 3,
+        // Diagnosis = 2,
+        // ISDU = 3,
     }
 
 
@@ -67,10 +68,10 @@ mod annex_a {
     pub enum M_Sequence_Type {
         #[allow(non_camel_case_types)]
         Type_0 = 0,
-        #[allow(non_camel_case_types)]
-        Type_1 = 1,
-        #[allow(non_camel_case_types)]
-        Type_2 = 2,
+        // #[allow(non_camel_case_types)]
+        // Type_1 = 1,
+        // #[allow(non_camel_case_types)]
+        // Type_2 = 2,
         // reserved = 3,
     }
 
