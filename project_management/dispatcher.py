@@ -46,9 +46,10 @@ class Dispatcher:
 
 def run_dispatcher(scripts, description=None):
     dispatcher = Dispatcher(scripts, description)
-    return_code = dispatcher.parse_args()
-    exit(return_code)
+    dispatcher.parse_args()
 
 
 def run_command(command):
-    subprocess.run(command, check=True)
+    result = subprocess.run(command)
+    if result.returncode != 0:
+        exit(result.returncode)

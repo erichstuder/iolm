@@ -72,7 +72,7 @@ class Executor:
             result = subprocess.run(exec_command, env=env)
             if result.returncode != 0:
                 print('Execution failed')
-                return(result.returncode)
+                exit(result.returncode)
 
         finally:
             subprocess.run(['docker', 'compose', '-f', yml_file_path, '-p', project, 'down'], check=True, env=env)
