@@ -75,11 +75,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mc() {
+    fn test_create_mc() {
         let mc: u8 = create_mc(RW::WriteAccess, CommunicationChannel::Process, 0x00);
         assert_eq!(mc, 0x00);
 
         let mc: u8 = create_mc(RW::ReadAccess, CommunicationChannel::Page, 0x02);
         assert_eq!(mc, 0xA2);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid address size")]
+    fn test_create_mc_panic() {
+        let mc: u8 = create_mc(RW::ReadAccess, CommunicationChannel::Page, 0b1_1111+1);
+    }
+
+    #[test]
+    fn test_create_ckt_without_checksum() {
+        let ckt = create_ckt_without_checksum(M_Sequence_Type::Type_0);
+        assert_eq!(ckt, 0x00);
+    }
+
+    #[test]
+    fn test_calculate_checksum() {
+        let mut message: [u8; 4] = [1,2,3,4];
+        let checksum = calculate_checksum(&mut message);
+        assert_eq!(message[0], 1);
+        assert_eq!(message[1], 63);
+        assert_eq!(message[2], 3);
+        assert_eq!(message[3], 4);
     }
 }
