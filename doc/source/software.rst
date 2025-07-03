@@ -17,8 +17,7 @@ Software
 -------------------------------------
 
 .. raw:: html
-
-    <iframe src="rust_doc/iol/structure.html" width="100%" style="border:none;" onload="this.style.height=this.contentWindow.document.body.scrollHeight + 20 + 'px';"></iframe>
+    :file: auto_generated/rust_doc/iol/structure.html
 
 .. thumbnail:: auto_generated/rust_doc/iol/dependencies_owns.png
 

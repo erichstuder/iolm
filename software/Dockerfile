@@ -41,6 +41,7 @@ WORKDIR /home/$USER/dependencies_fetch_project/dummy/examples/stm32f446re
 RUN cargo init
 COPY ./examples/stm32f446re/Cargo.toml .
 RUN cargo fetch
+
 # - For example when used as devcontainer, the UID is set to a default value (see above).
 #   I wasn't able to pass the UID of the local user to the container in this case.
 #   So when using the devcontainer, the local user is then used and can't access the fetched dependencies.

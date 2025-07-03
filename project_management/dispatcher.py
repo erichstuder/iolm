@@ -41,14 +41,15 @@ class Dispatcher:
                     run_command([work_dir + '/' + self.scripts[key]] + script_args)
                     break
 
-        return work_dir
+        return 0
 
 
 def run_dispatcher(scripts, description=None):
     dispatcher = Dispatcher(scripts, description)
     dispatcher.parse_args()
-    exit(0)
 
 
 def run_command(command):
-    subprocess.run(command, check=True)
+    result = subprocess.run(command)
+    if result.returncode != 0:
+        exit(result.returncode)
