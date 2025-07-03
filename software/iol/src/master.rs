@@ -7,6 +7,8 @@ use defmt::info;
 
 use futures;
 
+mod smi;
+
 mod port_power_switching;
 pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<PortPowerSwitchingActions<A>>;
 
