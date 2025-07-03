@@ -58,7 +58,7 @@ if __name__ == "__main__":
                     ignore='target'
                 )
                 if last_software_mod_times != current_software_mod_times:
-                    subprocess.run([sys.executable, '../run.py', '--software', '--doc'])
+                    subprocess.run([sys.executable, Path(__file__).parent / '../run.py', '--software', '--doc'])
                     last_software_mod_times = current_software_mod_times
                     update_doc = True
 
