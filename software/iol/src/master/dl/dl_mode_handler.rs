@@ -1,3 +1,9 @@
+//! State machine fo the Master DL-mode handler
+//!
+//! see
+//! - [#7.3.2.4 - IO-Link Specification](../../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=75)
+//! - [#7.2 - IO-Link Safety Extension](../../../spec/IO-Link_Safety_System-Extensions_10092_V114_Oct24.pdf#page=40)
+
 #[cfg(feature = "log")]
 use log::info;
 #[cfg(feature = "defmt")]
