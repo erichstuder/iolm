@@ -1,6 +1,6 @@
 //! Annex A
 //!
-//! see [#Annex A](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=230)
+//! see [#Annex A - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=230)
 
 // This a workaround as this code in here is shown unused although used.
 // The compiler shows no warnings. Looks like the rust-analyzer has a problem here.

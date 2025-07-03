@@ -1,6 +1,6 @@
 //! Physical Layer
 //!
-//! see [#5](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=41)
+//! see [#5 - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=41)
 
 #[cfg(feature = "log")]
 use log::info;

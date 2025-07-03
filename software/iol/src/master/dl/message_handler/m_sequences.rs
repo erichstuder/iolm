@@ -1,6 +1,6 @@
 //! M-sequences
 //!
-//! see [#7.3.3.2](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=81)
+//! see [#7.3.3.2 - IO-Link Specification](../../../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=81)
 
 pub use crate::common::annex_a::CommunicationChannel;
 use crate::common::annex_a::{self, RW};
