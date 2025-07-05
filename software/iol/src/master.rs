@@ -9,6 +9,9 @@ use futures;
 
 mod smi;
 
+mod sm;
+use sm::SM;
+
 mod port_power_switching;
 pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<PortPowerSwitchingActions<A>>;
 
@@ -120,8 +123,9 @@ impl<A: Actions> dl::Actions for DlActions<A> {
 
 pub struct Master<A: Actions> {
     _actions: A, //unused at the moment. maybe later.
-    pl: PL<PlActions<A>>,
+    sm: SM,
     dl: DL<DlActions<A>>,
+    pl: PL<PlActions<A>>,
     port_power_switching: port_power_switching::StateMachine<PortPowerSwitchingActions<A>>,
 }
 
@@ -129,8 +133,9 @@ impl<A: Actions + Copy> Master<A> {
     pub fn new(actions: A) -> Self{
         Self {
             _actions: actions,
-            pl: PL::new(PlActions { actions }),
+            sm: SM::new(),
             dl: DL::new(DlActions { actions }),
+            pl: PL::new(PlActions { actions }),
             port_power_switching: port_power_switching::StateMachine::new(
                 PortPowerSwitchingActions { actions }
             ),
@@ -139,6 +144,7 @@ impl<A: Actions + Copy> Master<A> {
 
     pub async fn run(&mut self) {
         futures::join!(
+            self.sm.run(),
             self.pl.run(),
             self.dl.run(),
             self.port_power_switching.run(),

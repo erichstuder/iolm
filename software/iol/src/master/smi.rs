@@ -2,6 +2,7 @@
 //!
 //! see [#11.2 - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=175)
 
+use crate::master::sm;
 use structure_of_smi_service_arguments::*;
 use annex_e::{ArgBlockID, ArgBlock, PortConfigList, JobError};
 
@@ -18,15 +19,37 @@ pub struct SmiResult<T: ArgBlock> {
     arg_block: T,
 }
 
-#[allow(dead_code)] // TODO: remove
 #[allow(non_snake_case)]
-pub fn SMI_PortConfiguration(
-    _client_id: ClientID,
-    _port_number: PortNumber,
+/// SMI Port Configuration service
+///
+/// # Parameters
+/// * `client_id`
+/// * `port_number`
+/// * `arg_block_length` - Ignored: Not necessary in this implementation.
+/// * `arg_block`
+pub async fn SMI_PortConfiguration(
+    _client_id: ClientID, // TODO: currently ignored
+    port_number: PortNumber,
     _arg_block_length: ArgBlockLength,
-    _arg_block: PortConfigList,
+    arg_block: PortConfigList,
 ) -> Result<SmiResult<PortConfigList>, SmiResult<JobError>> {
     const _EXP_ARG_BLOCK_ID: ExpArgBlockID = ArgBlockID::VoidBlock as ExpArgBlockID;
+
+    let revision_id: u8 = 0x11; // Note: According to B.1.5 this can be overwritten. Where? By who?
+
+    let port_config = sm::Service::SM_SetPortConfig {
+        port_number,
+        configured_cycle_time: arg_block.port_cycle_time,
+        target_mode: sm::TargetMode::INACTIVE, // TODO: set correct value
+        configured_revision_id: revision_id,
+        inspection_level: sm::InspectionLevel::NO_CHECK, //TODO: set correct value
+        configured_vendor_id: arg_block.vendor_id,
+        configured_device_id: arg_block.device_id,
+        configured_function_id: 0x0000, // TODO: don't know yet what this is for
+        configured_serial_number: 0x00, // TODO: will be implemented later
+    };
+    sm::SERVICE_CHANNEL.send(port_config).await;
+
     Ok(SmiResult {
         client_id: 0,
         port_number: 0,
@@ -155,6 +178,6 @@ mod annex_f {
         pub sequence: [u8; Length],
     }
     impl<const Length: usize> OctetStringT<Length> {
-        const A: () = assert!(Length <= 232, "Length must not exceed 232");
+        const _A: () = assert!(Length <= 232, "Length must not exceed 232");
     }
 }
