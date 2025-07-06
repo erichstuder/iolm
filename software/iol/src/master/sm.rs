@@ -46,11 +46,11 @@ pub enum Service {
 }
 
 pub struct PortConfigSuccess {
-    port_number: u8,
+    pub port_number: u8,
 }
 
 pub struct PortConfigFail {
-    port_number: u8
+    pub port_number: u8
 }
 impl PortConfigFail {
     const ERROR_INFO: ErrorInfo = ErrorInfo::PARAMETER_CONFLICT;

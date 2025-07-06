@@ -4,35 +4,25 @@
 
 use crate::master::sm;
 use structure_of_smi_service_arguments::*;
-use annex_e::{ArgBlockID, ArgBlock, PortConfigList, JobError};
+use annex_e::{ArgBlockID, ArgBlock, PortConfigList, VoidBlock, JobError};
 
 pub struct SmiResult<T: ArgBlock> {
-    #[allow(dead_code)] //TODO: remove
     client_id: ClientID,
-    #[allow(dead_code)] //TODO: remove
     port_number: PortNumber,
-    #[allow(dead_code)] //TODO: remove
     ref_arg_block_id: RefArgBlockID,
-    #[allow(dead_code)] //TODO: remove
-    arg_block_length: ArgBlockLength,
-    #[allow(dead_code)] //TODO: remove
+    //arg_block_length: ArgBlockLength, // This value is not needed in this implementation as we work with structs.
     arg_block: T,
 }
 
 #[allow(non_snake_case)]
 /// SMI Port Configuration service
 ///
-/// # Parameters
-/// * `client_id`
-/// * `port_number`
-/// * `arg_block_length` - Ignored: Not necessary in this implementation.
-/// * `arg_block`
+/// Note: Argument arg_block_length has been left out. If is not necessary in this implementation as we work with structs.
 pub async fn SMI_PortConfiguration(
-    _client_id: ClientID, // TODO: currently ignored
+    client_id: ClientID,
     port_number: PortNumber,
-    _arg_block_length: ArgBlockLength,
     arg_block: PortConfigList,
-) -> Result<SmiResult<PortConfigList>, SmiResult<JobError>> {
+) -> Result<SmiResult<VoidBlock>, SmiResult<JobError>> {
     const _EXP_ARG_BLOCK_ID: ExpArgBlockID = ArgBlockID::VoidBlock as ExpArgBlockID;
 
     let revision_id: u8 = 0x11; // Note: According to B.1.5 this can be overwritten. Where? By who?
@@ -50,20 +40,33 @@ pub async fn SMI_PortConfiguration(
     };
     sm::SERVICE_CHANNEL.send(port_config).await;
 
-    Ok(SmiResult {
-        client_id: 0,
-        port_number: 0,
-        ref_arg_block_id: 0,
-        arg_block_length: 0,
-        arg_block: PortConfigList {
-            port_mode: 0,
-            validation_and_backup: 0,
-            iq_behavior: 0,
-            port_cycle_time: 0,
-            vendor_id: 0,
-            device_id: 0,
+    let service_result = sm::RESULT_CHANNEL.receive().await;
+    match service_result {
+        sm::ServiceResult::SM_SetPortConfig(result) => {
+            match result {
+                Ok(data) => {
+                    Ok(SmiResult {
+                        client_id,
+                        port_number: data.port_number,
+                        ref_arg_block_id: arg_block.get_arg_block_id(),
+                        arg_block: VoidBlock,
+                    })
+                }
+                Err(data) => {
+                    Err(SmiResult {
+                        client_id,
+                        port_number: data.port_number,
+                        ref_arg_block_id: arg_block.get_arg_block_id(),
+                        arg_block: JobError {
+                            exp_arg_block_id: VoidBlock::ARG_BLOCK_ID,
+                            error_code: 0, // TODO: set correct code
+                            additional_code: 0, // TODO: set correct code
+                        }
+                    })
+                }
+            }
         }
-    })
+    }
 }
 
 /// see [#11.2.2 - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=176)
@@ -72,7 +75,7 @@ mod structure_of_smi_service_arguments {
     pub type PortNumber = u8;
     pub type ExpArgBlockID = u16;
     pub type RefArgBlockID = u16;
-    pub type ArgBlockLength = u16;
+    // pub type ArgBlockLength = u16; // This value is not needed in this implementation as we work with structs.
     // ArgBlock is variable
 }
 
@@ -115,6 +118,10 @@ mod annex_e {
 
     pub trait ArgBlock {
         const ARG_BLOCK_ID: u16;
+
+        fn get_arg_block_id(&self) -> u16 {
+            Self::ARG_BLOCK_ID
+        }
     }
 
     pub struct MasterIdent<const MAX_NUMBER_OF_PORTS: usize> {
@@ -161,6 +168,11 @@ mod annex_e {
     }
     impl<const DATA_LEN: usize> OnRequestDataRead<DATA_LEN> {
         const ARG_BLOCK_ID: u16 = 0x3001;
+    }
+
+    pub struct VoidBlock;
+    impl ArgBlock for VoidBlock {
+        const ARG_BLOCK_ID: u16 = 0xFFF0;
     }
 
     pub struct JobError {
