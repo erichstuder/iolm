@@ -151,24 +151,16 @@ impl<A: Actions + Copy> Master<A> {
         );
     }
 
-    //Some helper functions for the moment. They may be removed in the future.
-
-    // pub async fn port_power_on(&self) {
-    //     PORT_POWER_SWITCHING_EVENT_CHANNEL.send(port_power_switching::Event::PortPowerOn).await;
-    //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
-    // }
-
-    // pub async fn port_power_off(&self) {
-    //     PORT_POWER_SWITCHING_EVENT_CHANNEL.send(port_power_switching::Event::PortPowerOff).await;
-    //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
-    // }
-
-    // pub async fn port_power_off_on(&self, duration: u64) {
-    //     PORT_POWER_SWITCHING_EVENT_CHANNEL.send(port_power_switching::Event::OneTimePowerOff(duration)).await;
-    //     PORT_POWER_SWITCHING_EVENT_RESULT_CHANNEL.receive().await;
-    // }
-
     pub async fn dl_set_mode_startup() {
-        DL::<DlActions<A>>::DL_SetMode(dl::Mode::STARTUP).await.unwrap();
+        dl::dl_services::send_service(dl::Service::DL_SetMode {
+            mode: dl::dl_setmode::Mode::Startup,
+            value_list: dl::dl_setmode::ValueList { //TODO: set correct values
+                m_sequence_time: 0,
+                m_sequence_type: dl::dl_setmode::MSequenceType::TYPE_0,
+                pd_input_length: 0,
+                pd_output_length: 0,
+                on_req_data_length_per_message: 0,
+            },
+        }).await;
     }
 }

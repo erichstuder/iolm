@@ -7,6 +7,8 @@
 // #[cfg(feature = "defmt")]
 // use defmt::info;
 
+use crate::master::dl::dl_services;
+
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
@@ -18,6 +20,7 @@ pub enum InspectionLevel {
     // IDENTICAL, // not recommended for new developments
 }
 
+#[derive(Copy, Clone)]
 pub enum TargetMode {
     CFGCOM,
     AUTOCOM,
@@ -64,22 +67,29 @@ pub enum ServiceResult {
 pub static SERVICE_CHANNEL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
 
+
 enum State {
     #[allow(non_camel_case_types)]
     PortInactive_0,
     #[allow(non_camel_case_types)]
-    JoinPseudoState_9,
+    CheckCompatibility_1,
+    #[allow(non_camel_case_types)]
+    DIDO_8,
+    #[allow(non_camel_case_types)]
+    JoinPseudoState_9(Service),
     // there is more
 }
 
 pub struct SM {
     state: State,
+    comp_retry: u8,
 }
 
 impl SM {
     pub fn new() -> Self {
         Self {
             state: State::PortInactive_0,
+            comp_retry: 0,
         }
     }
 
@@ -90,16 +100,42 @@ impl SM {
     }
 
     async fn next(&mut self) {
-        match self.state {
+        match &self.state {
             State::PortInactive_0 => {
-                // I think first we need to go to JoinPseudoState_9 then a variable will be set and we may take T1. But not yet clear.
-                self.state = State::JoinPseudoState_9;
-            },
-            State::JoinPseudoState_9 => {
                 match SERVICE_CHANNEL.receive().await {
-                    Service::SM_SetPortConfig {..} => return, //TODO: implement
+                    service @ Service::SM_SetPortConfig {..} => {
+                        self.state = State::JoinPseudoState_9(service);
+                    },
+                    // Service::DL_Mode => {
+                    //     self.comp_retry = 0;
+                    //     self.state = State::CheckCompatibility_1
+                    // },
                 }
+            },
+            State::CheckCompatibility_1 => {
+                let _ = SERVICE_CHANNEL.receive().await; // TODO: Just a dummy await here for now to keep the system running.
             }
+            State::DIDO_8 => {
+                let _ = SERVICE_CHANNEL.receive().await; // TODO: Just a dummy await here for now to keep the system running.
+            },
+            State::JoinPseudoState_9(service) => {
+                match service {
+                    Service::SM_SetPortConfig {target_mode, ..} => { // TODO: use the paramaters
+                        match target_mode {
+                            TargetMode::INACTIVE => {
+                                self.state = State::PortInactive_0;
+                            }
+                            TargetMode::CFGCOM | TargetMode::AUTOCOM => {
+                                self.state = State::PortInactive_0;
+                            }
+                            TargetMode::DI | TargetMode::DO => {
+                                self.state = State::DIDO_8
+                            }
+                        }
+                    },
+                    _ => panic!("unexpected service"),
+                }
+            },
         }
 
     }

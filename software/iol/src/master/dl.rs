@@ -5,6 +5,11 @@
 
 use futures;
 
+mod services;
+pub use services::outside_dl as dl_services;
+pub use services::Service;
+pub use services::dl_setmode;
+
 mod dl_mode_handler;
 pub type DlModeHandlerStateMachine<A> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>;
 pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
@@ -98,24 +103,24 @@ impl<A: Actions + Copy> DL<A> {
         );
     }
 
-    #[allow(non_snake_case)]
-    pub async fn DL_SetMode(mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
-        // self.m_sequence_time = value_list.m_sequence_time;
-        // self.m_sequence_type = value_list.m_sequence_type;
-        // self.pd_input_length = value_list.pd_input_length;
-        // self.pd_output_length = value_list.pd_output_length;
-        // self.on_req_data_length_per_message = value_list.on_req_data_length_per_message;
+    // #[allow(non_snake_case)]
+    // pub async fn DL_SetMode(mode: Mode/*, _value_list: ValueList*/) -> Result<(), ErrorInfo> {
+    //     // self.m_sequence_time = value_list.m_sequence_time;
+    //     // self.m_sequence_type = value_list.m_sequence_type;
+    //     // self.pd_input_length = value_list.pd_input_length;
+    //     // self.pd_output_length = value_list.pd_output_length;
+    //     // self.on_req_data_length_per_message = value_list.on_req_data_length_per_message;
 
-        let event = match mode {
-            Mode::INACTIVE => dl_mode_handler::Event::DL_SetMode_INACTIVE,
-            Mode::STARTUP => dl_mode_handler::Event::DL_SetMode_STARTUP,
-            Mode::PREOPERATE => dl_mode_handler::Event::DL_SetMODE_PREOPERATE,
-            Mode::OPERATE => dl_mode_handler::Event::DL_SetMODE_OPERATE,
-        };
+    //     let event = match mode {
+    //         Mode::INACTIVE => dl_mode_handler::Service::DL_SetMode_INACTIVE,
+    //         Mode::STARTUP => dl_mode_handler::Service::DL_SetMode_STARTUP,
+    //         Mode::PREOPERATE => dl_mode_handler::Service::DL_SetMODE_PREOPERATE,
+    //         Mode::OPERATE => dl_mode_handler::Service::DL_SetMODE_OPERATE,
+    //     };
 
-        dl_mode_handler::EVENT_CHANNEL.send(event).await;
-         // At the moment we just panic here on error. I don't know how to handle this error yet.
-        dl_mode_handler::RESULT_CHANNEL.receive().await.unwrap();
-        Ok(())
-    }
+    //     dl_mode_handler::SERVICE_REQ.send(event).await;
+    //      // At the moment we just panic here on error. I don't know how to handle this error yet.
+    //     dl_mode_handler::SERVICE_CNF.receive().await.unwrap();
+    //     Ok(())
+    // }
 }

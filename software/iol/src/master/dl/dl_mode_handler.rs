@@ -9,9 +9,9 @@ use log::info;
 #[cfg(feature = "defmt")]
 use defmt::info;
 
-use embassy_sync::channel::Channel;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
+use crate::master::dl::services::{Service, ServiceResult};
+use crate::master::dl::services::inside_dl::*;
+use crate::master::dl::services::{dl_setmode, dl_mode};
 use crate::master::pl;
 use crate::master::dl::message_handler as mh;
 
@@ -42,17 +42,17 @@ pub enum State {
     WaitOnPortPowerOn_11,
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Event {
-    #[allow(non_camel_case_types)]
-    DL_SetMode_INACTIVE,
-    #[allow(non_camel_case_types)]
-    DL_SetMode_STARTUP,
-    #[allow(non_camel_case_types)]
-    DL_SetMODE_PREOPERATE,
-    #[allow(non_camel_case_types)]
-    DL_SetMODE_OPERATE,
-}
+// #[derive(Debug, PartialEq, Copy, Clone)]
+// pub enum Service {
+//     #[allow(non_camel_case_types)]
+//     DL_SetMode_INACTIVE,
+//     #[allow(non_camel_case_types)]
+//     DL_SetMode_STARTUP,
+//     #[allow(non_camel_case_types)]
+//     DL_SetMODE_PREOPERATE,
+//     #[allow(non_camel_case_types)]
+//     DL_SetMODE_OPERATE,
+// }
 
 pub enum ReadyPulseResult {
     ReadyPulseOk,
@@ -60,11 +60,11 @@ pub enum ReadyPulseResult {
     TimeToReadyElapsed,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum EventError {
-    #[allow(unused)] //TODO: remove
-    InvalidState(State, Event),
-}
+// #[derive(Debug, Copy, Clone)]
+// pub enum EventError {
+//     #[allow(unused)] //TODO: remove
+//     InvalidState(State, Service),
+// }
 
 #[cfg(feature = "iols")]
 #[derive(PartialEq)]
@@ -84,9 +84,6 @@ pub trait Actions {
     #[allow(async_fn_in_trait)]
     async fn port_power_off_on_ms(&self, duration: u64);
 }
-
-pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
-pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, Result<(), EventError>, 1> = Channel::new();
 
 pub struct StateMachine<A> {
     state: State,
@@ -121,21 +118,29 @@ impl<A: Actions> StateMachine<A> {
         }
     }
 
-    async fn await_event(&self) -> Event {
-        EVENT_CHANNEL.receive().await
-    }
+    // async fn await_event(&self) -> Service {
+    //     SERVICE_REQ.receive().await
+    // }
 
-    async fn confirm_event(&self, result: Result<(), EventError>) {
-        RESULT_CHANNEL.send(result).await;
-    }
+    // async fn confirm_event(&self, result: Result<(), EventError>) {
+    //     SERVICE_CNF.send(result).await;
+    // }
 
     async fn next(&mut self) {
         match self.state {
             State::Idle_0 => {
-                let event = self.await_event().await;
-                match event {
-                    Event::DL_SetMode_STARTUP => self.confirm_event(Ok(())).await,
-                    _ => self.confirm_event(Err(EventError::InvalidState(State::Idle_0, event))).await,
+                let service = receive_service().await;
+                match service {
+                    Service::DL_SetMode { mode, value_list: _ } => { //TODO: use value_list
+                        match mode {
+                            dl_setmode::Mode::Startup => send_service_result(ServiceResult::DL_SetMode(Ok(()))).await,
+                            _ => {
+                                let result = dl_setmode::Fail{ error_info: dl_setmode::ErrorInfo::StateConflict };
+                                send_service_result(ServiceResult::DL_SetMode(Err(result))).await;
+                            }
+                        }
+                    },
+                    _ => panic!("invalid service"),
                 }
 
                 #[cfg(feature = "iols")]
@@ -184,6 +189,7 @@ impl<A: Actions> StateMachine<A> {
                 if result != pl::ServiceResult::PL_WakeUp {
                     panic!("unexpected result: {:?}", result);
                 }
+                send_service(Service::DL_Mode(dl_mode::RealMode::COM2)).await;
                 self.state = State::ComRequestCOM2_7; // Note: For the moment we jump directly to COM2 instead of COM3 => fix!
             },
             State::ComRequestCOM2_7 => {
