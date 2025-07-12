@@ -138,37 +138,6 @@ impl SM {
             State::DIDO_8 => {
                 let _ = SERVICE_CHANNEL.receive().await; // TODO: Just a dummy await here for now to keep the system running.
             },
-            // State::JoinPseudoState_9(service) => {
-            //     match service {
-            //         Service::SM_SetPortConfig {target_mode, ..} => { // TODO: use the paramaters
-            //             match target_mode {
-            //                 TargetMode::INACTIVE => {
-            //                     dl::services::send_service(dl::Service::DL_SetMode {
-            //                         mode: dl::dl_setmode::Mode::Inactive,
-            //                         value_list: dl::dl_setmode::ValueList { // TODO: is a value list necessary for Inactive?
-            //                             m_sequence_time: 0,
-            //                             m_sequence_type: dl::dl_setmode::MSequenceType::TYPE_0,
-            //                             pd_input_length: 0,
-            //                             pd_output_length: 0,
-            //                             on_req_data_length_per_message: 0,
-            //                         }
-            //                     }).await;
-
-            //                     // TODO: PL_SetMode SDCI
-
-            //                     self.state = State::PortInactive_0;
-            //                 }
-            //                 TargetMode::CFGCOM | TargetMode::AUTOCOM => {
-            //                     self.state = State::PortInactive_0;
-            //                 }
-            //                 TargetMode::DI | TargetMode::DO => {
-            //                     self.state = State::DIDO_8
-            //                 }
-            //             }
-            //         },
-            //         _ => panic!("unexpected service"),
-            //     }
-            // },
         }
 
     }
