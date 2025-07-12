@@ -5,7 +5,7 @@ use std::future::Future;
 use log::info;
 use env_logger;
 
-use iol::master;
+use iol::master::{self, smi};
 
 #[tokio::main]
 async fn main() {
@@ -70,7 +70,20 @@ async fn use_master() {
 
     sleep(Duration::from_secs(2)).await;
 
-    master::Master::<MasterActions>::dl_set_mode_startup().await;
+    let client_id = 0;
+    let port_number = 0;
+    let _ = smi::SMI_PortConfiguration(
+        client_id,
+        port_number,
+        smi::annex_e::PortConfigList {
+            port_mode: 0,
+            validation_and_backup: 0,
+            iq_behavior: 0,
+            port_cycle_time: 0,
+            vendor_id: 0,
+            device_id: 0,
+        }
+    ).await;
 
     sleep(Duration::from_secs(20)).await;
 }

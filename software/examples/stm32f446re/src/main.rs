@@ -14,7 +14,7 @@ use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
 
 use l6360::{self, L6360, HardwareAccess};
-use iol::master;
+use iol::master::{self, smi};
 
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -52,7 +52,20 @@ async fn main(spawner: Spawner) {
     // test code
     Timer::after_millis(2_000).await;
     info!("startup");
-    master::Master::<MasterActions>::dl_set_mode_startup().await;
+    let client_id = 0;
+    let port_number = 0;
+    let _ = smi::SMI_PortConfiguration(
+        client_id,
+        port_number,
+        smi::annex_e::PortConfigList {
+            port_mode: 0,
+            validation_and_backup: 0,
+            iq_behavior: 0,
+            port_cycle_time: 0,
+            vendor_id: 0,
+            device_id: 0,
+        }
+    ).await;
     Timer::after_millis(100_000).await;
 }
 

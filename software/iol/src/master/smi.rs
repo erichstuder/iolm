@@ -10,7 +10,7 @@ pub struct SmiResult<T: ArgBlock> {
     client_id: ClientID,
     port_number: PortNumber,
     ref_arg_block_id: RefArgBlockID,
-    //arg_block_length: ArgBlockLength, // This value is not needed in this implementation as we work with structs.
+    //arg_block_length: ArgBlockLength, // Note: This value is not needed in this implementation as we work with structs.
     arg_block: T,
 }
 
@@ -80,7 +80,7 @@ mod structure_of_smi_service_arguments {
 }
 
 /// see [#Annex E - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=278)
-mod annex_e {
+pub mod annex_e {
 
     use super::annex_f::OctetStringT;
 
