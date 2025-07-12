@@ -9,9 +9,9 @@ use log::info;
 #[cfg(feature = "defmt")]
 use defmt::info;
 
-use crate::master::dl::services::{Service, ServiceResult};
-use crate::master::dl::services::inside_dl::*;
-use crate::master::dl::services::{dl_setmode, dl_mode};
+use crate::master::dl::dl_services::{Service, ServiceResult};
+use crate::master::dl::dl_services::inside_dl::*;
+use crate::master::dl::dl_services::{dl_setmode, dl_mode};
 use crate::master::pl;
 use crate::master::dl::message_handler as mh;
 

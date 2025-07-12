@@ -7,7 +7,7 @@
 // #[cfg(feature = "defmt")]
 // use defmt::info;
 
-use crate::master::dl::dl_services;
+use crate::master::dl;
 
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -75,8 +75,9 @@ enum State {
     CheckCompatibility_1,
     #[allow(non_camel_case_types)]
     DIDO_8,
-    #[allow(non_camel_case_types)]
-    JoinPseudoState_9(Service),
+    // JoinPseudoState_9 is not used. Instead an additional state to await DL_Mode_STARTUP is added between state 0 and 1
+    AwaitStartup,
+    
     // there is more
 }
 
@@ -103,39 +104,71 @@ impl SM {
         match &self.state {
             State::PortInactive_0 => {
                 match SERVICE_CHANNEL.receive().await {
-                    service @ Service::SM_SetPortConfig {..} => {
-                        self.state = State::JoinPseudoState_9(service);
-                    },
-                    // Service::DL_Mode => {
-                    //     self.comp_retry = 0;
-                    //     self.state = State::CheckCompatibility_1
-                    // },
+                    Service::SM_SetPortConfig {target_mode, ..} => { // TODO: use all parameters
+                        match target_mode {
+                            TargetMode::CFGCOM | TargetMode::AUTOCOM => self.state = State::AwaitStartup,
+                            TargetMode::INACTIVE => self.state = State::PortInactive_0,
+                            TargetMode::DI | TargetMode::DO => self.state = State::DIDO_8,
+                        }
+                    }
+                }
+            },
+            State::AwaitStartup => {
+                let service = dl::services::receive_service().await;
+                match service {
+                    dl::Service::DL_Mode(real_mode) => {
+                        match real_mode {
+                            dl::dl_mode::RealMode::INACTIVE => {
+                                // I think this makes sense, although this is not in the spec.
+                                self.state = State::PortInactive_0;
+                            }
+                            dl::dl_mode::RealMode::STARTUP => {
+                                self.comp_retry = 0;
+                                self.state = State::CheckCompatibility_1;
+                            }
+                            _ => panic!("unexpected mode: {:?}", real_mode),
+                        }
+                    }
+                    _ => panic!("unexpected service: {:?}", service)
                 }
             },
             State::CheckCompatibility_1 => {
                 let _ = SERVICE_CHANNEL.receive().await; // TODO: Just a dummy await here for now to keep the system running.
-            }
+            },
             State::DIDO_8 => {
                 let _ = SERVICE_CHANNEL.receive().await; // TODO: Just a dummy await here for now to keep the system running.
             },
-            State::JoinPseudoState_9(service) => {
-                match service {
-                    Service::SM_SetPortConfig {target_mode, ..} => { // TODO: use the paramaters
-                        match target_mode {
-                            TargetMode::INACTIVE => {
-                                self.state = State::PortInactive_0;
-                            }
-                            TargetMode::CFGCOM | TargetMode::AUTOCOM => {
-                                self.state = State::PortInactive_0;
-                            }
-                            TargetMode::DI | TargetMode::DO => {
-                                self.state = State::DIDO_8
-                            }
-                        }
-                    },
-                    _ => panic!("unexpected service"),
-                }
-            },
+            // State::JoinPseudoState_9(service) => {
+            //     match service {
+            //         Service::SM_SetPortConfig {target_mode, ..} => { // TODO: use the paramaters
+            //             match target_mode {
+            //                 TargetMode::INACTIVE => {
+            //                     dl::services::send_service(dl::Service::DL_SetMode {
+            //                         mode: dl::dl_setmode::Mode::Inactive,
+            //                         value_list: dl::dl_setmode::ValueList { // TODO: is a value list necessary for Inactive?
+            //                             m_sequence_time: 0,
+            //                             m_sequence_type: dl::dl_setmode::MSequenceType::TYPE_0,
+            //                             pd_input_length: 0,
+            //                             pd_output_length: 0,
+            //                             on_req_data_length_per_message: 0,
+            //                         }
+            //                     }).await;
+
+            //                     // TODO: PL_SetMode SDCI
+
+            //                     self.state = State::PortInactive_0;
+            //                 }
+            //                 TargetMode::CFGCOM | TargetMode::AUTOCOM => {
+            //                     self.state = State::PortInactive_0;
+            //                 }
+            //                 TargetMode::DI | TargetMode::DO => {
+            //                     self.state = State::DIDO_8
+            //                 }
+            //             }
+            //         },
+            //         _ => panic!("unexpected service"),
+            //     }
+            // },
         }
 
     }

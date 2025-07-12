@@ -5,10 +5,10 @@
 
 use futures;
 
-mod services;
-pub use services::outside_dl as dl_services;
-pub use services::Service;
-pub use services::dl_setmode;
+mod dl_services;
+pub use dl_services::outside_dl as services;
+pub use dl_services::Service;
+pub use dl_services::{ dl_setmode, dl_mode };
 
 mod dl_mode_handler;
 pub type DlModeHandlerStateMachine<A> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>;

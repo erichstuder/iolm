@@ -48,6 +48,8 @@ static RESULT_FROM_DL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Chan
 static SERVICE_FROM_DL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::new();
 static RESULT_TO_DL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
 
+
+#[derive(Debug)]
 pub enum Service {
     #[allow(non_camel_case_types)]
     DL_SetMode {
@@ -64,6 +66,7 @@ pub enum ServiceResult {
 }
 
 pub mod dl_setmode {
+    #[derive(Debug)]
     pub enum Mode {
         Inactive,
         Startup,
@@ -71,6 +74,7 @@ pub mod dl_setmode {
         Operate,
     }
 
+    #[derive(Debug)]
     pub enum MSequenceType {
         #[allow(non_camel_case_types)]
         TYPE_0,
@@ -94,6 +98,8 @@ pub mod dl_setmode {
         TYPE_2_V,
     }
 
+
+    #[derive(Debug)]
     pub struct ValueList {
         pub m_sequence_time: u8, //TODO: correct data type?
         pub m_sequence_type: MSequenceType,
@@ -113,6 +119,7 @@ pub mod dl_setmode {
 }
 
 pub mod dl_mode {
+    #[derive(Debug)]
     pub enum RealMode {
         INACTIVE,
         COM1,
