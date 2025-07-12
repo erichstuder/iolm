@@ -145,8 +145,8 @@ impl<A: Actions + Copy> Master<A> {
     pub async fn run(&mut self) {
         futures::join!(
             self.sm.run(),
-            self.pl.run(),
             self.dl.run(),
+            self.pl.run(),
             self.port_power_switching.run(),
         );
     }
