@@ -11,7 +11,7 @@ use defmt::info;
 
 use crate::master::dl::dl_services::{Service, ServiceResult};
 use crate::master::dl::dl_services::inside_dl::*;
-use crate::master::dl::dl_services::{dl_setmode, dl_mode};
+use crate::master::dl::dl_services::{dl_set_mode, dl_mode};
 use crate::master::pl;
 use crate::master::dl::message_handler as mh;
 
@@ -133,9 +133,9 @@ impl<A: Actions> StateMachine<A> {
                 match service {
                     Service::DL_SetMode { mode, value_list: _ } => { //TODO: use value_list
                         match mode {
-                            dl_setmode::Mode::Startup => send_service_result(ServiceResult::DL_SetMode(Ok(()))).await,
+                            dl_set_mode::Mode::Startup => send_service_result(ServiceResult::DL_SetMode(Ok(()))).await,
                             _ => {
-                                let result = dl_setmode::Fail{ error_info: dl_setmode::ErrorInfo::StateConflict };
+                                let result = dl_set_mode::Fail{ error_info: dl_set_mode::ErrorInfo::StateConflict };
                                 send_service_result(ServiceResult::DL_SetMode(Err(result))).await;
                             }
                         }

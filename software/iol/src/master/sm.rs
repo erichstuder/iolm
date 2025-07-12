@@ -7,66 +7,13 @@
 // #[cfg(feature = "defmt")]
 // use defmt::info;
 
+mod sm_services;
+pub use sm_services::outside_sm as services;
+pub use sm_services::{Service, ServiceResult};
+pub use sm_services::sm_set_port_config;
+use sm_services::inside_sm::*;
+
 use crate::master::dl;
-
-use embassy_sync::channel::Channel;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
-pub enum InspectionLevel {
-    #[allow(non_camel_case_types)]
-    NO_CHECK,
-    #[allow(non_camel_case_types)]
-    TYPE_COMP,
-    // IDENTICAL, // not recommended for new developments
-}
-
-#[derive(Copy, Clone)]
-pub enum TargetMode {
-    CFGCOM,
-    AUTOCOM,
-    INACTIVE,
-    DI,
-    DO,
-}
-
-pub enum ErrorInfo {
-    PARAMETER_CONFLICT,
-}
-
-pub enum Service {
-    #[allow(non_camel_case_types)]
-    SM_SetPortConfig {
-        port_number: u8,
-        configured_cycle_time: u8, //TODO: not clear what this is. is this the PortCycleTime from the SMI? data type?
-        target_mode: TargetMode,
-        configured_revision_id: u8,
-        inspection_level: InspectionLevel,
-        configured_vendor_id: u16,
-        configured_device_id: u32, // Note: In the SMI it is defined as u32 with 3 octets used.
-        configured_function_id: u16,
-        configured_serial_number: u8 // TODO: specification says: up to 16 octets (see Table 80). Don't know yet what we need.
-    },
-}
-
-pub struct PortConfigSuccess {
-    pub port_number: u8,
-}
-
-pub struct PortConfigFail {
-    pub port_number: u8
-}
-impl PortConfigFail {
-    const ERROR_INFO: ErrorInfo = ErrorInfo::PARAMETER_CONFLICT;
-}
-
-pub enum ServiceResult {
-    #[allow(non_camel_case_types)]
-    SM_SetPortConfig(Result<PortConfigSuccess, PortConfigFail>),
-}
-
-pub static SERVICE_CHANNEL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::new();
-pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
-
 
 enum State {
     #[allow(non_camel_case_types)]
@@ -77,7 +24,7 @@ enum State {
     DIDO_8,
     // JoinPseudoState_9 is not used. Instead an additional state to await DL_Mode_STARTUP is added between state 0 and 1
     AwaitStartup,
-    
+
     // there is more
 }
 
@@ -103,12 +50,14 @@ impl SM {
     async fn next(&mut self) {
         match &self.state {
             State::PortInactive_0 => {
-                match SERVICE_CHANNEL.receive().await {
+                match receive_service().await {
                     Service::SM_SetPortConfig {target_mode, ..} => { // TODO: use all parameters
                         match target_mode {
-                            TargetMode::CFGCOM | TargetMode::AUTOCOM => self.state = State::AwaitStartup,
-                            TargetMode::INACTIVE => self.state = State::PortInactive_0,
-                            TargetMode::DI | TargetMode::DO => self.state = State::DIDO_8,
+                            sm_set_port_config::TargetMode::CFGCOM |
+                            sm_set_port_config::TargetMode::AUTOCOM => self.state = State::AwaitStartup,
+                            sm_set_port_config::TargetMode::INACTIVE => self.state = State::PortInactive_0,
+                            sm_set_port_config::TargetMode::DI |
+                            sm_set_port_config::TargetMode::DO => self.state = State::DIDO_8,
                         }
                     }
                 }
@@ -133,10 +82,10 @@ impl SM {
                 }
             },
             State::CheckCompatibility_1 => {
-                let _ = SERVICE_CHANNEL.receive().await; // TODO: Just a dummy await here for now to keep the system running.
+                let _ = receive_service().await; // TODO: Just a dummy await here for now to keep the system running.
             },
             State::DIDO_8 => {
-                let _ = SERVICE_CHANNEL.receive().await; // TODO: Just a dummy await here for now to keep the system running.
+                let _ = receive_service().await; // TODO: Just a dummy await here for now to keep the system running.
             },
         }
 

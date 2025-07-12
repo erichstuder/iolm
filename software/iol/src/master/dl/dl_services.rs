@@ -1,4 +1,4 @@
-//! State machine fo the Master DL-mode handler
+//! Data link layer services
 //!
 //! see
 //! - [#7.2- IO-Link Specification](../../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=58)
@@ -53,8 +53,8 @@ static RESULT_TO_DL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channe
 pub enum Service {
     #[allow(non_camel_case_types)]
     DL_SetMode {
-        mode: dl_setmode::Mode,
-        value_list: dl_setmode::ValueList,
+        mode: dl_set_mode::Mode,
+        value_list: dl_set_mode::ValueList,
     },
     #[allow(non_camel_case_types)]
     DL_Mode(dl_mode::RealMode),
@@ -62,10 +62,10 @@ pub enum Service {
 
 pub enum ServiceResult {
     #[allow(non_camel_case_types)]
-    DL_SetMode(Result<(), dl_setmode::Fail>),
+    DL_SetMode(Result<(), dl_set_mode::Fail>),
 }
 
-pub mod dl_setmode {
+pub mod dl_set_mode {
     #[derive(Debug)]
     pub enum Mode {
         Inactive,

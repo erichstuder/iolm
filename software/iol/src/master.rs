@@ -153,10 +153,10 @@ impl<A: Actions + Copy> Master<A> {
 
     pub async fn dl_set_mode_startup() {
         dl::services::send_service(dl::Service::DL_SetMode {
-            mode: dl::dl_setmode::Mode::Startup,
-            value_list: dl::dl_setmode::ValueList { //TODO: set correct values
+            mode: dl::dl_set_mode::Mode::Startup,
+            value_list: dl::dl_set_mode::ValueList { //TODO: set correct values
                 m_sequence_time: 0,
-                m_sequence_type: dl::dl_setmode::MSequenceType::TYPE_0,
+                m_sequence_type: dl::dl_set_mode::MSequenceType::TYPE_0,
                 pd_input_length: 0,
                 pd_output_length: 0,
                 on_req_data_length_per_message: 0,

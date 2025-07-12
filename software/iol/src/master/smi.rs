@@ -30,17 +30,17 @@ pub async fn SMI_PortConfiguration(
     let port_config = sm::Service::SM_SetPortConfig {
         port_number,
         configured_cycle_time: arg_block.port_cycle_time,
-        target_mode: sm::TargetMode::INACTIVE, // TODO: set correct value
+        target_mode: sm::sm_set_port_config::TargetMode::INACTIVE, // TODO: set correct value
         configured_revision_id: revision_id,
-        inspection_level: sm::InspectionLevel::NO_CHECK, //TODO: set correct value
+        inspection_level: sm::sm_set_port_config::InspectionLevel::NO_CHECK, //TODO: set correct value
         configured_vendor_id: arg_block.vendor_id,
         configured_device_id: arg_block.device_id,
         configured_function_id: 0x0000, // TODO: don't know yet what this is for
         configured_serial_number: 0x00, // TODO: will be implemented later
     };
-    sm::SERVICE_CHANNEL.send(port_config).await;
+    sm::services::send_service(port_config).await;
 
-    let service_result = sm::RESULT_CHANNEL.receive().await;
+    let service_result = sm::services::receive_service_result().await;
     match service_result {
         sm::ServiceResult::SM_SetPortConfig(result) => {
             match result {
