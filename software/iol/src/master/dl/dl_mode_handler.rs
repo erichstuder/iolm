@@ -16,6 +16,7 @@ use crate::master::pl;
 use crate::master::dl::message_handler as mh;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum State {
     #[allow(non_camel_case_types)]
     Idle_0,
@@ -127,6 +128,7 @@ impl<A: Actions> StateMachine<A> {
     // }
 
     async fn next(&mut self) {
+        info!("{:?}", self.state);
         match self.state {
             State::Idle_0 => {
                 let service = receive_service().await;
@@ -153,14 +155,11 @@ impl<A: Actions> StateMachine<A> {
             },
             #[cfg(feature = "iols")]
             State::WaitOnPortPowerOn_11 => {
-                info!("WaitOnPortPowerOn_11");
                 self.actions.port_power_off_on_ms(self.min_shutdown_time_ms).await;
                 self.state = State::WaitOnReadyPulse_10;
-                info!("done");
             },
             #[cfg(feature = "iols")]
             State::WaitOnReadyPulse_10 => {
-                info!("WaitOnReadyPulse_10");
                 match self.actions.await_ready_pulse_with_timeout_ms(self.time_to_ready_ms).await {
                     ReadyPulseResult::ReadyPulseOk => {
                         info!("ReadyPulseOk");
@@ -179,11 +178,9 @@ impl<A: Actions> StateMachine<A> {
                 self.actions.wait_ms(1000).await; //TODO:remove
             },
             State::EstablishCom_1 => {
-                info!("EstablishCom_1");
                 self.state = State::WURQ_5;
             },
             State::WURQ_5 => {
-                info!("WURQ_5");
                 pl::SERVICE_CHANNEL.send(pl::Service::PL_WakeUp).await;
                 let result = pl::RESULT_CHANNEL.receive().await;
                 if result != pl::ServiceResult::PL_WakeUp {
@@ -193,7 +190,6 @@ impl<A: Actions> StateMachine<A> {
                 self.state = State::ComRequestCOM2_7; // Note: For the moment we jump directly to COM2 instead of COM3 => fix!
             },
             State::ComRequestCOM2_7 => {
-                info!("ComRequestCOM2_7");
                 // TODO: T_DMT is 32 * T_BIT which results in about 833us for COM2. We try 1ms
                 // TODO: Where to put the speed Definitions for COM3, COM2, COM1 ?
                 const T_DMT: u64 = 1;
