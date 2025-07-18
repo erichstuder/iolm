@@ -2,6 +2,11 @@
 //!
 //! see [#11.2 - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=175)
 
+// #[cfg(feature = "log")]
+// use log::info;
+// #[cfg(feature = "defmt")]
+// use defmt::info;
+
 use crate::master::sm;
 use structure_of_smi_service_arguments::*;
 use annex_e::{ArgBlockID, ArgBlock, PortConfigList, VoidBlock, JobError};
@@ -30,7 +35,7 @@ pub async fn SMI_PortConfiguration(
     let port_config = sm::Service::SM_SetPortConfig {
         port_number,
         configured_cycle_time: arg_block.port_cycle_time,
-        target_mode: sm::sm_set_port_config::TargetMode::INACTIVE, // TODO: set correct value
+        target_mode: sm::sm_set_port_config::TargetMode::AUTOCOM, // TODO: set correct value
         configured_revision_id: revision_id,
         inspection_level: sm::sm_set_port_config::InspectionLevel::NO_CHECK, //TODO: set correct value
         configured_vendor_id: arg_block.vendor_id,

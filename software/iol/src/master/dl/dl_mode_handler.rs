@@ -43,29 +43,11 @@ pub enum State {
     WaitOnPortPowerOn_11,
 }
 
-// #[derive(Debug, PartialEq, Copy, Clone)]
-// pub enum Service {
-//     #[allow(non_camel_case_types)]
-//     DL_SetMode_INACTIVE,
-//     #[allow(non_camel_case_types)]
-//     DL_SetMode_STARTUP,
-//     #[allow(non_camel_case_types)]
-//     DL_SetMODE_PREOPERATE,
-//     #[allow(non_camel_case_types)]
-//     DL_SetMODE_OPERATE,
-// }
-
 pub enum ReadyPulseResult {
     ReadyPulseOk,
     // Note: It is more elegant if TimeToReadyElapsed is also an Event instead of a Guard.
     TimeToReadyElapsed,
 }
-
-// #[derive(Debug, Copy, Clone)]
-// pub enum EventError {
-//     #[allow(unused)] //TODO: remove
-//     InvalidState(State, Service),
-// }
 
 #[cfg(feature = "iols")]
 #[derive(PartialEq)]
@@ -118,14 +100,6 @@ impl<A: Actions> StateMachine<A> {
             self.next().await;
         }
     }
-
-    // async fn await_event(&self) -> Service {
-    //     SERVICE_REQ.receive().await
-    // }
-
-    // async fn confirm_event(&self, result: Result<(), EventError>) {
-    //     SERVICE_CNF.send(result).await;
-    // }
 
     async fn next(&mut self) {
         info!("{:?}", self.state);

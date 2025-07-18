@@ -2,10 +2,10 @@
 //!
 //! see [#9.2 - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=122)
 
-// #[cfg(feature = "log")]
-// use log::info;
-// #[cfg(feature = "defmt")]
-// use defmt::info;
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
 
 mod sm_services;
 pub use sm_services::outside_sm as services;
@@ -15,6 +15,8 @@ use sm_services::inside_sm::*;
 
 use crate::master::dl;
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum State {
     #[allow(non_camel_case_types)]
     PortInactive_0,
@@ -48,13 +50,26 @@ impl SM {
     }
 
     async fn next(&mut self) {
+        info!("{:?}", self.state);
         match &self.state {
             State::PortInactive_0 => {
                 match receive_service().await {
                     Service::SM_SetPortConfig {target_mode, ..} => { // TODO: use all parameters
                         match target_mode {
                             sm_set_port_config::TargetMode::CFGCOM |
-                            sm_set_port_config::TargetMode::AUTOCOM => self.state = State::AwaitStartup,
+                            sm_set_port_config::TargetMode::AUTOCOM => {
+                                dl::services::send_service(dl::Service::DL_SetMode {
+                                    mode: dl::dl_set_mode::Mode::Startup,
+                                    value_list: dl::dl_set_mode::ValueList {
+                                        m_sequence_time: 0,
+                                        m_sequence_type: dl::dl_set_mode::MSequenceType::TYPE_0,
+                                        pd_input_length: 0,
+                                        pd_output_length: 0,
+                                        on_req_data_length_per_message: 0,
+                                    }
+                                }).await;
+                                self.state = State::AwaitStartup;
+                            }
                             sm_set_port_config::TargetMode::INACTIVE => self.state = State::PortInactive_0,
                             sm_set_port_config::TargetMode::DI |
                             sm_set_port_config::TargetMode::DO => self.state = State::DIDO_8,
@@ -70,6 +85,10 @@ impl SM {
                             dl::dl_mode::RealMode::INACTIVE => {
                                 // I think this makes sense, although this is not in the spec.
                                 self.state = State::PortInactive_0;
+                            }
+                            dl::dl_mode::RealMode::COM2 => {
+                                // do nothing for the moment
+                                // maybe this mode can here be ignored for good
                             }
                             dl::dl_mode::RealMode::STARTUP => {
                                 self.comp_retry = 0;

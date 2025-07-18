@@ -14,6 +14,7 @@ use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum State {
     #[allow(non_camel_case_types)]
     PowerOn_0,
@@ -76,9 +77,9 @@ impl<A: Actions> StateMachine<A> {
     }
 
     async fn next(&mut self) {
+        info!("{:?}", self.state);
         match self.state {
             State::PowerOn_0 => {
-                info!("entering PowerOn_0");
                 match self.await_event().await {
                     Event::PortPowerOn => {
                         self.confirm_event().await;
@@ -99,7 +100,6 @@ impl<A: Actions> StateMachine<A> {
                 }
             },
             State::PowerOff_1 => {
-                info!("entering PowerOff_1");
                 let event = match self.off_timer_active {
                     false => self.await_event().await,
                     true => self.actions.await_event_with_timeout_ms(self.off_time).await,
