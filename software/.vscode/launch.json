@@ -22,7 +22,7 @@
                         {
                             "channelNumber": 0,
                             "dataFormat": "Defmt",
-                            "logFormat": "{t} {L:5} {s}\n{{m} @ {F}:{l}%dimmed}"
+                            "logFormat": "{t:blue} {L:5} {s:blue}\n  {{m} @ {F}:{l}%dimmed}"
                         }
                     ]
                 }
@@ -36,7 +36,9 @@
             "program": "examples/std/target/debug/std",
             "env": {
                 "RUST_LOG": "info"
-            }
+            },
+            "console": "internalConsole",
+            "internalConsoleOptions": "openOnSessionStart",
         }
     ]
 }

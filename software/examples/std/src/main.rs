@@ -3,7 +3,6 @@
 use tokio::time::{sleep, Duration, timeout};
 use std::future::Future;
 use log::info;
-use env_logger;
 
 use iol::master::{self, smi};
 
@@ -11,13 +10,11 @@ use iol::master::{self, smi};
 async fn main() {
     setup_logger();
 
+    info!("start master");
     use_master().await;
-    //use_dl().await;
 
     sleep(Duration::from_secs(100)).await;
 }
-
-
 
 #[derive(Copy, Clone)]
 struct MasterActions;
@@ -70,6 +67,7 @@ async fn use_master() {
 
     sleep(Duration::from_secs(2)).await;
 
+    info!("smi port configuration");
     let client_id = 0;
     let port_number = 0;
     let _ = smi::SMI_PortConfiguration(
@@ -88,53 +86,34 @@ async fn use_master() {
     sleep(Duration::from_secs(20)).await;
 }
 
-
-// #[derive(Copy, Clone)]
-// struct MasterDlActionsImpl;
-
-// impl iol::master_dl::Actions for MasterDlActionsImpl {
-//     async fn wait_ms(&self, duration: u64) {
-//         sleep(Duration::from_millis(duration)).await;
-//     }
-// }
-
-// #[allow(unused)]
-// async fn use_dl() {
-//     let (mut dl, dl_mode_handler) = master_dl::DL::new(MasterDlActionsImpl);
-//     tokio::spawn(run_dl(dl_mode_handler));
-
-//     sleep(Duration::from_secs(2)).await;
-
-//     info!("sending signal");
-//     dl.DL_SetMode(master_dl::Mode::STARTUP).await.unwrap();
-// }
-
-// async fn run_dl(mut dl: master_dl::DlModeHandlerStateMachine<MasterDlActionsImpl>) {
-//     info!("run dl");
-//     dl.run().await;
-// }
-
-
-
 fn setup_logger() {
-    env_logger::Builder::from_default_env()
-    .format(|buf, record| {
-        use std::io::Write;
-        use chrono::Local;
-        use anstyle;
+    use env_logger;
 
-        writeln!(
-            buf,
-            "{} {}{}{}\t{}\n  \x1b[2m{} @ {}:{}\x1b[0m",
-            Local::now().format("%Y-%m-%d %H:%M:%S%.6f"),
-            buf.default_level_style(record.level()),
-            record.level(),
-            anstyle::Reset,
-            record.args(),
-            record.module_path().unwrap_or("unknwon module"),
-            record.file().unwrap_or("unknown file"),
-            record.line().unwrap_or(0),
-        )
-    })
-    .init();
+    env_logger::Builder::from_default_env()
+        .write_style(env_logger::WriteStyle::Always)
+        .format(|buf, record| {
+            use std::io::Write;
+            // use chrono::Local;
+            use std::time::Instant;
+            use std::sync::OnceLock;
+            use anstyle;
+
+            static START_TIME: OnceLock<Instant> = OnceLock::new();
+            let start_time = START_TIME.get_or_init(|| Instant::now());
+
+            writeln!(
+                buf,
+                "{:.6} {}{}{}\t{}\n  \x1b[90m{} @ {}:{}\x1b[0m",
+                // Local::now().format("%Y-%m-%d %H:%M:%S%.6f"),
+                start_time.elapsed().as_secs_f64(),
+                buf.default_level_style(record.level()),
+                record.level(),
+                anstyle::Reset,
+                record.args(),
+                record.module_path().unwrap_or("unknwon module"),
+                record.file().unwrap_or("unknown file"),
+                record.line().unwrap_or(0),
+            )
+        })
+        .init();
 }
