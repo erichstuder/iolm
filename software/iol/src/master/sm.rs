@@ -86,7 +86,8 @@ impl SM {
                                 // I think this makes sense, although this is not in the spec.
                                 self.state = State::PortInactive_0;
                             }
-                            dl::dl_mode::RealMode::COM2 => {
+                            dl::dl_mode::RealMode::COM2 |
+                            dl::dl_mode::RealMode::COM3 => {
                                 // do nothing for the moment
                                 // maybe this mode can here be ignored for good
                             }

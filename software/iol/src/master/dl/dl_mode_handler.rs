@@ -15,6 +15,9 @@ use crate::master::dl::dl_services::{dl_set_mode, dl_mode};
 use crate::master::pl;
 use crate::master::dl::message_handler as mh;
 
+use wake_up_procedure_and_retry_characteristics as wake_up_properties;
+use core::time::Duration;
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum State {
@@ -30,11 +33,11 @@ pub enum State {
     //Operate_4,
     #[allow(non_camel_case_types)]
     WURQ_5,
-    // ComRequestCOM3_6,
+    ComRequestCOM3_6,
     ComRequestCOM2_7,
-    // ComRequestCOM1_8,
-    // #[allow(non_camel_case_types)]
-    // Retry_9,
+    ComRequestCOM1_8,
+    #[allow(non_camel_case_types)]
+    Retry_9,
     #[cfg(feature = "iols")]
     #[allow(non_camel_case_types)]
     WaitOnReadyPulse_10,
@@ -59,13 +62,13 @@ enum Safety {
 
 pub trait Actions {
     #[allow(async_fn_in_trait)]
-    async fn wait_ms(&self, duration: u64);
+    async fn wait(&self, duration: Duration);
 
     #[allow(async_fn_in_trait)]
-    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
+    async fn await_ready_pulse_with_timeout(&self, duration: Duration) -> ReadyPulseResult;
 
     #[allow(async_fn_in_trait)]
-    async fn port_power_off_on_ms(&self, duration: u64);
+    async fn port_power_off_on(&self, duration: Duration);
 }
 
 pub struct StateMachine<A> {
@@ -75,9 +78,9 @@ pub struct StateMachine<A> {
     #[cfg(feature = "iols")]
     safety: Safety,
     #[cfg(feature = "iols")]
-    min_shutdown_time_ms: u64,
+    min_shutdown_time: Duration,
     #[cfg(feature = "iols")]
-    time_to_ready_ms: u64,
+    time_to_ready: Duration,
 }
 
 impl<A: Actions> StateMachine<A> {
@@ -89,9 +92,9 @@ impl<A: Actions> StateMachine<A> {
             #[cfg(feature = "iols")]
             safety: Safety::SafetyCom, //TODO: don't know yet where it will be set from.
             #[cfg(feature = "iols")]
-            min_shutdown_time_ms: 3000, //TODO: don't know yet where it will be set from.
+            min_shutdown_time: Duration::from_millis(3000), //TODO: don't know yet where it will be set from.
             #[cfg(feature = "iols")]
-            time_to_ready_ms: 5000, //TODO: don't know yet where it will be set from
+            time_to_ready: Duration::from_millis(5000), //TODO: don't know yet where it will be set from
         }
     }
 
@@ -129,12 +132,12 @@ impl<A: Actions> StateMachine<A> {
             },
             #[cfg(feature = "iols")]
             State::WaitOnPortPowerOn_11 => {
-                self.actions.port_power_off_on_ms(self.min_shutdown_time_ms).await;
+                self.actions.port_power_off_on(self.min_shutdown_time).await;
                 self.state = State::WaitOnReadyPulse_10;
             },
             #[cfg(feature = "iols")]
             State::WaitOnReadyPulse_10 => {
-                match self.actions.await_ready_pulse_with_timeout_ms(self.time_to_ready_ms).await {
+                match self.actions.await_ready_pulse_with_timeout(self.time_to_ready).await {
                     ReadyPulseResult::ReadyPulseOk => {
                         info!("ReadyPulseOk");
                         // Note:
@@ -149,7 +152,7 @@ impl<A: Actions> StateMachine<A> {
                     }
                 }
 
-                self.actions.wait_ms(1000).await; //TODO:remove
+                self.actions.wait(Duration::from_secs(1)).await; //TODO:remove
             },
             State::EstablishCom_1 => {
                 self.state = State::WURQ_5;
@@ -160,20 +163,58 @@ impl<A: Actions> StateMachine<A> {
                 if result != pl::ServiceResult::PL_WakeUp {
                     panic!("unexpected result: {:?}", result);
                 }
+                send_service(Service::DL_Mode(dl_mode::RealMode::COM3)).await;
+                self.state = State::ComRequestCOM3_6;
+            },
+            State::ComRequestCOM3_6 => {
+                self.actions.wait(wake_up_properties::com3::T_DMT).await;
+                // TODO: we jump right to COM2 => fix
                 send_service(Service::DL_Mode(dl_mode::RealMode::COM2)).await;
-                self.state = State::ComRequestCOM2_7; // Note: For the moment we jump directly to COM2 instead of COM3 => fix!
+                self.state = State::ComRequestCOM2_7;
             },
             State::ComRequestCOM2_7 => {
                 // TODO: T_DMT is 32 * T_BIT which results in about 833us for COM2. We try 1ms
-                // TODO: Where to put the speed Definitions for COM3, COM2, COM1 ?
-                const T_DMT: u64 = 1;
-                self.actions.wait_ms(T_DMT).await;
+                // const T_DMT: Duration = Duration::from_millis(1);
+                // self.actions.wait(T_DMT).await;
                 // ComRequest
+
+                self.actions.wait(wake_up_properties::com2::T_DMT).await;
                 mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx(mh::TransmissionRate::COM2)).await;
                 mh::RESULT_CHANNEL.receive().await;
 
-                self.actions.wait_ms(10000).await;
+                self.actions.wait(Duration::from_secs(100)).await;
             }
+            State::ComRequestCOM1_8 => {
+                self.actions.wait(Duration::from_secs(10)).await; // dummy wait
+            },
+            State::Retry_9 => {
+                self.actions.wait(Duration::from_secs(10)).await; // dummy wait
+            },
         }
+    }
+}
+
+// see Table 42
+mod wake_up_procedure_and_retry_characteristics {
+    use crate::master::pl::dynamic_characteristic_of_the_transmission as com_properties;
+    use core::time::Duration;
+
+    const fn multiply(factor: u8, duration: Duration) -> Duration {
+        Duration::from_nanos(((factor as u128) * duration.as_nanos()) as u64)
+    }
+
+    pub mod com1{
+        use super::*;
+        pub const T_DMT: Duration = multiply(32, com_properties::com1::T_BIT);
+    }
+
+    pub mod com2{
+        use super::*;
+        pub const T_DMT: Duration = multiply(32, com_properties::com2::T_BIT);
+    }
+
+    pub mod com3{
+        use super::*;
+        pub const T_DMT: Duration = multiply(32, com_properties::com3::T_BIT);
     }
 }

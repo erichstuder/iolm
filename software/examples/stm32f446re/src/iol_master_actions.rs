@@ -3,6 +3,7 @@ use embassy_time::Timer;
 use embassy_time::Instant;
 use embassy_stm32::i2c::I2c;
 use embassy_stm32::mode::Async;
+use core::time::Duration;
 
 use iol::master;
 use l6360::{self, L6360, HardwareAccess};
@@ -14,12 +15,8 @@ use super::IOL_TRANSCEIVER;
 pub struct MasterActions;
 
 impl master::Actions for MasterActions {
-    async fn wait_us(&self, duration: u64) {
-        Timer::after_micros(duration).await;
-    }
-
-    async fn wait_ms(&self, duration: u64) {
-        Timer::after_millis(duration).await;
+    async fn wait(&self, duration: Duration) {
+        Timer::after(embassy_time::Duration::from_nanos(duration.as_nanos() as u64)).await;
     }
 
     async fn get_cq(&self) -> l6360::PinState {
@@ -90,17 +87,17 @@ impl master::Actions for MasterActions {
         info!("done");
     }
 
-    async fn await_event_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
+    async fn await_event_with_timeout<F, T>(&self, duration: Duration, future: F) -> Option<T>
     where
         F: core::future::Future<Output = T> + Send
     {
-        embassy_time::with_timeout(embassy_time::Duration::from_millis(duration), future).await.ok()
+        embassy_time::with_timeout(embassy_time::Duration::from_nanos(duration.as_nanos() as u64), future).await.ok()
     }
 
-    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> master::ReadyPulseResult {
+    async fn await_ready_pulse_with_timeout(&self, duration: Duration) -> master::ReadyPulseResult {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             let result = embassy_time::with_timeout(
-                embassy_time::Duration::from_millis(duration),
+                embassy_time::Duration::from_nanos(duration.as_nanos() as u64),
                 measure_ready_pulse(l6360),
             ).await;
 

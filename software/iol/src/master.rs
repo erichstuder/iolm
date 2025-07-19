@@ -6,6 +6,7 @@ use log::info;
 use defmt::info;
 
 use futures;
+use core::time::Duration;
 
 pub mod smi;
 
@@ -27,10 +28,7 @@ pub type DlModeHandlerStateMachine<A> = dl::DlModeHandlerStateMachine<DlActions<
 
 pub trait Actions {
     #[allow(async_fn_in_trait)]
-    async fn wait_us(&self, duration: u64);
-
-    #[allow(async_fn_in_trait)]
-    async fn wait_ms(&self, duration: u64);
+    async fn wait(&self, duration: Duration);
 
     #[allow(async_fn_in_trait)]
     async fn get_cq(&self) -> PinState;
@@ -45,12 +43,12 @@ pub trait Actions {
     async fn port_power_off(&self);
 
     #[allow(async_fn_in_trait)]
-    async fn await_event_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
+    async fn await_event_with_timeout<F, T>(&self, duration: Duration, future: F) -> Option<T>
     where
         F: core::future::Future<Output = T> + Send;
 
     #[allow(async_fn_in_trait)]
-    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
+    async fn await_ready_pulse_with_timeout(&self, duration: Duration) -> ReadyPulseResult;
 
     #[allow(async_fn_in_trait)]
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
@@ -61,8 +59,8 @@ pub struct PlActions<A: Actions> {
 }
 
 impl<A: Actions> pl::Actions for PlActions<A> {
-    async fn wait_us(&self, duration: u64) {
-        self.actions.wait_us(duration).await;
+    async fn wait(&self, duration: Duration) {
+        self.actions.wait(duration).await;
     }
 
     async fn get_cq(&self) -> PinState {
@@ -91,8 +89,8 @@ impl<A: Actions> port_power_switching::Actions for PortPowerSwitchingActions<A> 
         self.actions.port_power_off().await;
     }
 
-    async fn await_event_with_timeout_ms(&self, duration: u64) -> port_power_switching::Event {
-        match self.actions.await_event_with_timeout_ms(duration, port_power_switching::EVENT_CHANNEL.receive()).await {
+    async fn await_event_with_timeout(&self, duration: Duration) -> port_power_switching::Event {
+        match self.actions.await_event_with_timeout(duration, port_power_switching::EVENT_CHANNEL.receive()).await {
             Some(event) => event,
             None => port_power_switching::Event::OffTimerElapsed,
         }
@@ -105,19 +103,19 @@ pub struct DlActions<A: Actions> {
 }
 
 impl<A: Actions> dl::Actions for DlActions<A> {
-    async fn wait_ms(&self, duration: u64) {
-        self.actions.wait_ms(duration).await;
+    async fn wait(&self, duration: Duration) {
+        self.actions.wait(duration).await;
     }
 
-    async fn port_power_off_on_ms(&self, duration: u64) {
+    async fn port_power_off_on(&self, duration: Duration) {
         info!("port power off on");
         port_power_switching::EVENT_CHANNEL.send(port_power_switching::Event::OneTimePowerOff(duration)).await;
         port_power_switching::RESULT_CHANNEL.receive().await;
         info!("port power off on: done");
     }
 
-    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult {
-        self.actions.await_ready_pulse_with_timeout_ms(duration).await
+    async fn await_ready_pulse_with_timeout(&self, duration: Duration) -> ReadyPulseResult {
+        self.actions.await_ready_pulse_with_timeout(duration).await
     }
 }
 

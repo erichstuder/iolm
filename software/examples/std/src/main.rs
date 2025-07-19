@@ -20,12 +20,8 @@ async fn main() {
 struct MasterActions;
 
 impl master::Actions for MasterActions {
-    async fn wait_us(&self, duration: u64) {
-        sleep(Duration::from_micros(duration)).await;
-    }
-
-    async fn wait_ms(&self, duration: u64) {
-        sleep(Duration::from_millis(duration)).await;
+    async fn wait(&self, duration: Duration) {
+        sleep(duration).await;
     }
 
     async fn get_cq(&self) -> l6360::PinState {
@@ -44,17 +40,17 @@ impl master::Actions for MasterActions {
         info!("port power off");
     }
 
-    async fn await_event_with_timeout_ms<F, T>(&self, duration: u64, future: F) -> Option<T>
+    async fn await_event_with_timeout<F, T>(&self, duration: Duration, future: F) -> Option<T>
     where
         F: Future<Output = T>,
     {
         info!("await with timeout");
-        let result = timeout(Duration::from_millis(duration), future).await.ok();
+        let result = timeout(duration, future).await.ok();
         info!("timeout");
         result
     }
 
-    async fn await_ready_pulse_with_timeout_ms(&self, _duration: u64) -> master::ReadyPulseResult {
+    async fn await_ready_pulse_with_timeout(&self, _duration: Duration) -> master::ReadyPulseResult {
         master::ReadyPulseResult::ReadyPulseOk
     }
 

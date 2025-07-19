@@ -10,6 +10,8 @@ use defmt::info;
 #[cfg(test)]
 use mockall::automock;
 
+use core::time::Duration;
+
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
@@ -25,7 +27,7 @@ pub enum State {
 pub enum Event {
     PortPowerOn,
     PortPowerOff,
-    OneTimePowerOff(u64),
+    OneTimePowerOff(Duration),
     // Note: It is more elegant if OffTimerElapsed is also an Event instead of a Guard.
     OffTimerElapsed,
 }
@@ -39,7 +41,7 @@ pub trait Actions {
     async fn port_power_off(&self);
 
     #[allow(async_fn_in_trait)]
-    async fn await_event_with_timeout_ms(&self, duration: u64) -> Event;
+    async fn await_event_with_timeout(&self, duration: Duration) -> Event;
 }
 
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
@@ -49,7 +51,7 @@ pub struct StateMachine<A: Actions> {
     state: State,
     actions: A,
     off_timer_active: bool,
-    off_time: u64,
+    off_time: Duration,
 }
 
 impl<A: Actions> StateMachine<A> {
@@ -58,7 +60,7 @@ impl<A: Actions> StateMachine<A> {
             state: State::PowerOn_0,
             actions,
             off_timer_active: false,
-            off_time: 0,
+            off_time: Duration::ZERO,
         }
     }
 
@@ -102,7 +104,7 @@ impl<A: Actions> StateMachine<A> {
             State::PowerOff_1 => {
                 let event = match self.off_timer_active {
                     false => self.await_event().await,
-                    true => self.actions.await_event_with_timeout_ms(self.off_time).await,
+                    true => self.actions.await_event_with_timeout(self.off_time).await,
                 };
 
                 match event {
@@ -163,7 +165,7 @@ mod tests {
     async fn PowerOn_0_state_OneTimerPowerOff_event() {
         let mut sm = StateMachine::new(MockActions::new());
         assert_eq!(sm.state, State::PowerOn_0);
-        EVENT_CHANNEL.send(Event::OneTimePowerOff(0)).await;
+        EVENT_CHANNEL.send(Event::OneTimePowerOff(Duration::ZERO)).await;
         sm.actions.expect_port_power_off()
             .times(1)
             .returning(|| ());
@@ -213,7 +215,7 @@ mod tests {
     async fn PowerOff_1_state_OneTimePowerOff_event() {
         let mut sm = StateMachine::new(MockActions::new());
         go_to_PowerOff_1(&mut sm).await;
-        EVENT_CHANNEL.send(Event::OneTimePowerOff(42)).await;
+        EVENT_CHANNEL.send(Event::OneTimePowerOff(Duration::from_millis(42))).await;
         sm.next().await;
         assert_eq!(RESULT_CHANNEL.receive().await, ());
         assert_eq!(sm.state, State::PowerOff_1);
@@ -248,12 +250,12 @@ mod tests {
     }
 
     #[allow(non_snake_case)]
-    async fn start_OneTimePowerOff() -> (StateMachine<MockActions>, u64) {
+    async fn start_OneTimePowerOff() -> (StateMachine<MockActions>, Duration) {
         let mut sm = StateMachine::new(MockActions::new());
         assert_eq!(sm.off_timer_active, false);
-        assert_eq!(sm.off_time, 0);
+        assert_eq!(sm.off_time, Duration::ZERO);
 
-        let off_time = 222 as u64;
+        let off_time = Duration::from_millis(222);
         EVENT_CHANNEL.send(Event::OneTimePowerOff(off_time)).await;
         sm.actions.expect_port_power_off()
             .times(1)
@@ -271,7 +273,7 @@ mod tests {
     async fn OneTimePowerOff_aborted_with_PortPowerOff() {
         let (mut sm, off_time) = start_OneTimePowerOff().await;
 
-        sm.actions.expect_await_event_with_timeout_ms()
+        sm.actions.expect_await_event_with_timeout()
             .times(1)
             .withf(move |duration| *duration == off_time)
             .returning(|_| Event::PortPowerOff);
@@ -287,8 +289,8 @@ mod tests {
     async fn OneTimePowerOff_aborted_with_OneTimePowerOff() {
         let (mut sm, off_time) = start_OneTimePowerOff().await;
 
-        let off_time_2 = 16 as u64;
-        sm.actions.expect_await_event_with_timeout_ms()
+        let off_time_2 = Duration::from_millis(16);
+        sm.actions.expect_await_event_with_timeout()
             .times(1)
             .withf(move |duration| *duration == off_time)
             .returning(move |_| Event::OneTimePowerOff(off_time_2));
@@ -304,7 +306,7 @@ mod tests {
     async fn OneTimePowerOff_aborted_with_PortPowerOn() {
         let (mut sm, off_time) = start_OneTimePowerOff().await;
 
-        sm.actions.expect_await_event_with_timeout_ms()
+        sm.actions.expect_await_event_with_timeout()
             .times(1)
             .withf(move |duration| *duration == off_time)
             .returning(|_| Event::PortPowerOn);
@@ -323,7 +325,7 @@ mod tests {
     async fn OneTimePowerOff_success() {
         let (mut sm, off_time) = start_OneTimePowerOff().await;
 
-        sm.actions.expect_await_event_with_timeout_ms()
+        sm.actions.expect_await_event_with_timeout()
             .times(1)
             .withf(move |duration| *duration == off_time)
             .returning(|_| Event::OffTimerElapsed);

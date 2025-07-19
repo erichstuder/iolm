@@ -10,6 +10,8 @@ use defmt::info;
 #[cfg(test)]
 use mockall::automock;
 
+use core::time::Duration;
+
 pub use embedded_hal::digital::PinState;
 
 use embassy_sync::channel::Channel;
@@ -44,7 +46,7 @@ pub enum WakeUpPulseDirection {
 #[cfg_attr(test, automock)]
 pub trait Actions {
     #[allow(async_fn_in_trait)]
-    async fn wait_us(&self, duration: u64);
+    async fn wait(&self, duration: Duration);
 
     #[allow(async_fn_in_trait)]
     async fn get_cq(&self) -> PinState;
@@ -86,9 +88,9 @@ impl<A: Actions> PL<A> {
 
     async fn wake_up(&mut self) {
         #[allow(non_upper_case_globals)]
-        const T_WU_us: u64 = 20;
+        const T_WU: Duration = Duration::from_micros(20);
         #[allow(non_upper_case_globals)]
-        const T_REN_us: u64 = 500;
+        const T_REN: Duration = Duration::from_micros(500);
 
         let wake_up_pulse_direction = match self.actions.get_cq().await {
             PinState::Low => WakeUpPulseDirection::Up,
@@ -97,7 +99,7 @@ impl<A: Actions> PL<A> {
 
         self.actions.wake_up_pulse(wake_up_pulse_direction).await;
 
-        self.actions.wait_us(T_REN_us - T_WU_us).await;
+        self.actions.wait(T_REN - T_WU).await;
 
         RESULT_CHANNEL.send(ServiceResult::PL_WakeUp).await;
     }
@@ -107,6 +109,57 @@ impl<A: Actions> PL<A> {
         self.actions.exchange_data(data, &mut answer[0..answer_length]).await;
         info!("reading done");
         RESULT_CHANNEL.send(ServiceResult::PL_Transfer { answer }).await;
+    }
+}
+
+// see Table 9
+pub mod dynamic_characteristic_of_the_transmission{
+    // trait COM {
+    //     #[allow(non_upper_case_globals)]
+    //     const f_DTR_bps: u32;
+    //     #[allow(non_upper_case_globals)]
+    //     const T_BIT_s: f32 = 1.0 / ( Self::f_DTR_bps as f32 );
+
+    //     // ... there is more
+    // }
+
+    // pub struct COM1;
+    // impl COM for COM1 {
+    //     const f_DTR_bps: u32 = 4800;
+    // }
+
+    // pub struct COM2;
+    // impl COM for COM2 {
+    //     const f_DTR_bps: u32 = 38400;
+    // }
+
+    // pub struct COM3;
+    // impl COM for COM3 {
+    //     const f_DTR_bps: u32 = 230400;
+    // }
+
+    use core::time::Duration;
+
+    const fn calculate_t_bit(f_dtr: u32) -> Duration {
+        Duration::from_nanos((1e9f64 / (f_dtr as f64)) as u64)
+    }
+
+    pub mod com1 {
+        use super::*;
+        pub const F_DTR: u32 = 4800;
+        pub const T_BIT: Duration = calculate_t_bit(F_DTR);
+    }
+
+    pub mod com2 {
+        use super::*;
+        pub const F_DTR: u32 = 38400;
+        pub const T_BIT: Duration = calculate_t_bit(F_DTR);
+    }
+
+    pub mod com3 {
+        use super::*;
+        pub const F_DTR: u32 = 230400;
+        pub const T_BIT: Duration = calculate_t_bit(F_DTR);
     }
 }
 
@@ -129,7 +182,7 @@ mod tests {
             .times(1)
             .returning(|_| ());
 
-        mock_actions.expect_wait_us()
+        mock_actions.expect_wait()
             .times(1)
             .returning(|_| ());
 
@@ -184,9 +237,9 @@ mod tests {
                 .with(eq(*wake_up_pulse_direction))
                 .returning(|_| ());
 
-            mock_actions.expect_wait_us()
+            mock_actions.expect_wait()
                 .times(1)
-                .with(eq(480))
+                .with(eq(Duration::from_micros(480)))
                 .returning(|_| ());
 
             let mut pl = PL::new(mock_actions);

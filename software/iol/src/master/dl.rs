@@ -4,6 +4,7 @@
 // use defmt::info;
 
 use futures;
+use core::time::Duration;
 
 mod dl_services;
 pub use dl_services::outside_dl as services;
@@ -48,13 +49,13 @@ pub enum ErrorInfo {
 
 pub trait Actions {
     #[allow(async_fn_in_trait)]
-    async fn wait_ms(&self, duration: u64);
+    async fn wait(&self, duration: Duration);
 
     #[allow(async_fn_in_trait)]
-    async fn port_power_off_on_ms(&self, duration: u64);
+    async fn port_power_off_on(&self, duration: Duration);
 
     #[allow(async_fn_in_trait)]
-    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult;
+    async fn await_ready_pulse_with_timeout(&self, duration: Duration) -> ReadyPulseResult;
 }
 
 pub struct DlModeHandlerActionsImpl<A: Actions>{
@@ -62,16 +63,16 @@ pub struct DlModeHandlerActionsImpl<A: Actions>{
 }
 
 impl<A: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<A> {
-    async fn wait_ms(&self, duration: u64) {
-        self.actions.wait_ms(duration).await;
+    async fn wait(&self, duration: Duration) {
+        self.actions.wait(duration).await;
     }
 
-    async fn port_power_off_on_ms(&self, duration: u64) {
-        self.actions.port_power_off_on_ms(duration).await;
+    async fn port_power_off_on(&self, duration: Duration) {
+        self.actions.port_power_off_on(duration).await;
     }
 
-    async fn await_ready_pulse_with_timeout_ms(&self, duration: u64) -> ReadyPulseResult {
-        self.actions.await_ready_pulse_with_timeout_ms(duration).await
+    async fn await_ready_pulse_with_timeout(&self, duration: Duration) -> ReadyPulseResult {
+        self.actions.await_ready_pulse_with_timeout(duration).await
     }
 }
 
