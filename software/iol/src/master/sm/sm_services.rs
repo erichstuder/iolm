@@ -50,6 +50,7 @@ static RESULT_FROM_SM: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Chan
 
 pub enum Service {
     #[allow(non_camel_case_types)]
+    #[allow(unused)] // TODO: remove
     SM_SetPortConfig {
         port_number: u8,
         configured_cycle_time: u8, //TODO: not clear what this is. is this the PortCycleTime from the SMI? data type?
@@ -65,10 +66,12 @@ pub enum Service {
 
 pub enum ServiceResult {
     #[allow(non_camel_case_types)]
+    #[allow(unused)] // TODO: remove
     SM_SetPortConfig(Result<sm_set_port_config::Success, sm_set_port_config::Fail>),
 }
 
 pub mod sm_set_port_config {
+    #[allow(unused)] // TODO: remove
     pub enum TargetMode {
         CFGCOM,
         AUTOCOM,
@@ -81,6 +84,7 @@ pub mod sm_set_port_config {
         #[allow(non_camel_case_types)]
         NO_CHECK,
         #[allow(non_camel_case_types)]
+        #[allow(unused)] // TODO: remove
         TYPE_COMP,
         // IDENTICAL, // not recommended for new developments
     }
@@ -89,7 +93,9 @@ pub mod sm_set_port_config {
         pub port_number: u8, // TODO: correct data type?
     }
 
+    #[allow(unused)] // TODO: remove
     pub enum ErrorInfo {
+        #[allow(non_camel_case_types)] //TODO: is this necessary?
         PARAMETER_CONFLICT,
     }
 
@@ -97,6 +103,7 @@ pub mod sm_set_port_config {
         pub port_number: u8, // TODO: correct data type?
     }
     impl Fail {
+        #[allow(unused)] // TODO: remove
         const ERROR_INFO: ErrorInfo = ErrorInfo::PARAMETER_CONFLICT;
     }
 }

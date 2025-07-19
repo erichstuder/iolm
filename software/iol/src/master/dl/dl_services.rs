@@ -11,17 +11,17 @@ pub mod outside_dl {
         super::SERVICE_TO_DL.send(service).await;
     }
 
-    pub async fn receive_service_result() -> super::ServiceResult {
-        super::RESULT_FROM_DL.receive().await
-    }
+    // pub async fn receive_service_result() -> super::ServiceResult {
+    //     super::RESULT_FROM_DL.receive().await
+    // }
 
     pub async fn receive_service() -> super::Service {
         super::SERVICE_FROM_DL.receive().await
     }
 
-    pub async fn send_service_result(result: super::ServiceResult) {
-        super::RESULT_TO_DL.send(result).await
-    }
+    // pub async fn send_service_result(result: super::ServiceResult) {
+    //     super::RESULT_TO_DL.send(result).await
+    // }
 }
 
 pub mod inside_dl {
@@ -29,9 +29,9 @@ pub mod inside_dl {
         super::SERVICE_FROM_DL.send(service).await;
     }
 
-    pub async fn receive_service_result() -> super::ServiceResult {
-        super::RESULT_TO_DL.receive().await
-    }
+    // pub async fn receive_service_result() -> super::ServiceResult {
+    //     super::RESULT_TO_DL.receive().await
+    // }
 
     pub async fn receive_service() -> super::Service {
         super::SERVICE_TO_DL.receive().await
@@ -46,7 +46,7 @@ static SERVICE_TO_DL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::ne
 static RESULT_FROM_DL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
 
 static SERVICE_FROM_DL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::new();
-static RESULT_TO_DL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
+// static RESULT_TO_DL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
 
 
 #[derive(Debug)]
@@ -54,6 +54,7 @@ pub enum Service {
     #[allow(non_camel_case_types)]
     DL_SetMode {
         mode: dl_set_mode::Mode,
+        #[allow(unused)] //TODO: remove
         value_list: dl_set_mode::ValueList,
     },
     #[allow(non_camel_case_types)]
@@ -62,11 +63,13 @@ pub enum Service {
 
 pub enum ServiceResult {
     #[allow(non_camel_case_types)]
+    #[allow(unused)] //TODO: remove
     DL_SetMode(Result<(), dl_set_mode::Fail>),
 }
 
 pub mod dl_set_mode {
     #[derive(Debug)]
+    #[allow(unused)] //TODO: remove
     pub enum Mode {
         Inactive,
         Startup,
@@ -75,6 +78,7 @@ pub mod dl_set_mode {
     }
 
     #[derive(Debug)]
+    #[allow(unused)] //TODO: remove
     pub enum MSequenceType {
         #[allow(non_camel_case_types)]
         TYPE_0,
@@ -100,6 +104,7 @@ pub mod dl_set_mode {
 
 
     #[derive(Debug)]
+    #[allow(unused)] //TODO: remove
     pub struct ValueList {
         pub m_sequence_time: u8, //TODO: correct data type?
         pub m_sequence_type: MSequenceType,
@@ -110,16 +115,19 @@ pub mod dl_set_mode {
 
     pub enum ErrorInfo {
         StateConflict,
+        #[allow(unused)] //TODO: remove
         ParameterConflict,
     }
 
     pub struct Fail {
+        #[allow(unused)] //TODO: remove
         pub error_info: ErrorInfo,
     }
 }
 
 pub mod dl_mode {
     #[derive(Debug)]
+    #[allow(unused)] //TODO: remove
     pub enum RealMode {
         INACTIVE,
         COM1,

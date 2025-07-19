@@ -11,6 +11,7 @@ use crate::master::sm;
 use structure_of_smi_service_arguments::*;
 use annex_e::{ArgBlockID, ArgBlock, PortConfigList, VoidBlock, JobError};
 
+#[allow(unused)] // TODO: remove
 pub struct SmiResult<T: ArgBlock> {
     client_id: ClientID,
     port_number: PortNumber,
@@ -78,6 +79,7 @@ pub async fn SMI_PortConfiguration(
 mod structure_of_smi_service_arguments {
     pub type ClientID = u8;
     pub type PortNumber = u8;
+    #[allow(unused)] // TODO: remove
     pub type ExpArgBlockID = u16;
     pub type RefArgBlockID = u16;
     // pub type ArgBlockLength = u16; // This value is not needed in this implementation as we work with structs.
@@ -129,6 +131,7 @@ pub mod annex_e {
         }
     }
 
+    #[allow(unused)] // TODO: remove
     pub struct MasterIdent<const MAX_NUMBER_OF_PORTS: usize> {
         vendor_id: u16,
         master_id: u32,
@@ -142,6 +145,7 @@ pub mod annex_e {
         const ARG_BLOCK_ID: u16 = 0x0001;
     }
     impl<const MAX_NUMBER_OF_PORTS: usize> MasterIdent<MAX_NUMBER_OF_PORTS> {
+        #[allow(unused)] // TODO: remove
         const MAX_NUMBER_OF_PORTS: u8 = MAX_NUMBER_OF_PORTS as u8;
     }
 
@@ -163,6 +167,7 @@ pub mod annex_e {
         pub on_request_data: OctetStringT<DATA_LEN>,
     }
     impl<const DATA_LEN: usize> OnRequestDataWrite<DATA_LEN> {
+        #[allow(unused)] // TODO: remove
         const ARG_BLOCK_ID: u16 = 0x3000;
     }
 
@@ -172,6 +177,7 @@ pub mod annex_e {
         pub on_request_data: OctetStringT<DATA_LEN>,
     }
     impl<const DATA_LEN: usize> OnRequestDataRead<DATA_LEN> {
+        #[allow(unused)] // TODO: remove
         const ARG_BLOCK_ID: u16 = 0x3001;
     }
 
@@ -191,10 +197,10 @@ pub mod annex_e {
 }
 
 mod annex_f {
-    pub struct OctetStringT<const Length: usize> {
-        pub sequence: [u8; Length],
+    pub struct OctetStringT<const LENGTH: usize> {
+        pub sequence: [u8; LENGTH],
     }
-    impl<const Length: usize> OctetStringT<Length> {
-        const _A: () = assert!(Length <= 232, "Length must not exceed 232");
+    impl<const LENGTH: usize> OctetStringT<LENGTH> {
+        const _A: () = assert!(LENGTH <= 232, "Length must not exceed 232");
     }
 }

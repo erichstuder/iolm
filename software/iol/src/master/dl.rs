@@ -17,14 +17,11 @@ pub use dl_mode_handler::ReadyPulseResult as ReadyPulseResult;
 
 mod message_handler;
 
-
+#[allow(unused)] //TODO: remove
 pub enum Mode {
-    #[allow(unused)] //TODO: remove
     INACTIVE,
     STARTUP,
-    #[allow(unused)] //TODO: remove
     PREOPERATE,
-    #[allow(unused)] //TODO: remove
     OPERATE,
 }
 
@@ -37,6 +34,7 @@ pub struct ValueList {
     // on_req_data_length_per_message: OnReqDataLengthPerMessage,
 }
 
+#[allow(unused)] //TODO: remove
 #[derive(Debug)]
 pub enum ErrorInfo {
     #[allow(non_camel_case_types)]

@@ -182,10 +182,16 @@ impl<A: Actions> StateMachine<A> {
                 mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx(mh::TransmissionRate::COM2)).await;
                 mh::RESULT_CHANNEL.receive().await;
 
-                self.actions.wait(Duration::from_secs(100)).await;
+                self.state = State::ComRequestCOM1_8; // TODO: implement the other exit
+
+                self.actions.wait(Duration::from_secs(100)).await;// dummy wait
             }
             State::ComRequestCOM1_8 => {
+                self.actions.wait(wake_up_properties::com1::T_DMT).await;
+
                 self.actions.wait(Duration::from_secs(10)).await; // dummy wait
+
+                self.state = State::Retry_9; // dummy state change
             },
             State::Retry_9 => {
                 self.actions.wait(Duration::from_secs(10)).await; // dummy wait
