@@ -8,8 +8,7 @@ use core::time::Duration;
 
 mod dl_services;
 pub use dl_services::outside_dl as services;
-pub use dl_services::Service;
-pub use dl_services::{ dl_set_mode, dl_mode };
+pub use dl_services::{Service, dl_set_mode, dl_mode };
 
 mod dl_mode_handler;
 pub type DlModeHandlerStateMachine<A> = dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>;

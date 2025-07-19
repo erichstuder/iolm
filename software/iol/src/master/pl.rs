@@ -14,28 +14,10 @@ use core::time::Duration;
 
 pub use embedded_hal::digital::PinState;
 
-use embassy_sync::channel::Channel;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
-pub enum Service {
-    //PL_SetMode,
-    #[allow(non_camel_case_types)]
-    PL_WakeUp,
-    #[allow(non_camel_case_types)]
-    PL_Transfer {
-        data: [u8; 32],
-        data_length: usize,
-        answer_length: usize
-    },
-}
-
-#[derive(PartialEq, Debug)]
-pub enum ServiceResult {
-    #[allow(non_camel_case_types)]
-    PL_WakeUp,
-    #[allow(non_camel_case_types)]
-    PL_Transfer{ answer: [u8; 32] },
-}
+mod pl_services;
+pub use pl_services::outside_pl as services;
+pub use pl_services::{Service, ServiceResult};
+use pl_services::inside_dl::*;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum WakeUpPulseDirection {
@@ -58,9 +40,6 @@ pub trait Actions {
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
 }
 
-pub static SERVICE_CHANNEL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::new();
-pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
-
 pub struct PL<A: Actions> {
     actions: A,
 }
@@ -80,7 +59,7 @@ impl<A: Actions> PL<A> {
     }
 
     async fn handle_service(&mut self) {
-        match SERVICE_CHANNEL.receive().await {
+        match receive_service().await {
             Service::PL_WakeUp => self.wake_up().await,
             Service::PL_Transfer { data, data_length, answer_length } => { self.transfer(&data[0..data_length], answer_length).await; }
         }
@@ -101,43 +80,19 @@ impl<A: Actions> PL<A> {
 
         self.actions.wait(T_REN - T_WU).await;
 
-        RESULT_CHANNEL.send(ServiceResult::PL_WakeUp).await;
+        send_service_result(ServiceResult::PL_WakeUp).await;
     }
 
     async fn transfer(&mut self, data: &[u8], answer_length: usize) {
         let mut answer = [0u8; 32];
         self.actions.exchange_data(data, &mut answer[0..answer_length]).await;
         info!("reading done");
-        RESULT_CHANNEL.send(ServiceResult::PL_Transfer { answer }).await;
+        send_service_result(ServiceResult::PL_Transfer { answer }).await;
     }
 }
 
 // see Table 9
 pub mod dynamic_characteristic_of_the_transmission{
-    // trait COM {
-    //     #[allow(non_upper_case_globals)]
-    //     const f_DTR_bps: u32;
-    //     #[allow(non_upper_case_globals)]
-    //     const T_BIT_s: f32 = 1.0 / ( Self::f_DTR_bps as f32 );
-
-    //     // ... there is more
-    // }
-
-    // pub struct COM1;
-    // impl COM for COM1 {
-    //     const f_DTR_bps: u32 = 4800;
-    // }
-
-    // pub struct COM2;
-    // impl COM for COM2 {
-    //     const f_DTR_bps: u32 = 38400;
-    // }
-
-    // pub struct COM3;
-    // impl COM for COM3 {
-    //     const f_DTR_bps: u32 = 230400;
-    // }
-
     use core::time::Duration;
 
     const fn calculate_t_bit(f_dtr: u32) -> Duration {
@@ -188,9 +143,9 @@ mod tests {
 
         let mut pl = PL::new(mock_actions);
 
-        SERVICE_CHANNEL.send(Service::PL_WakeUp).await;
+        services::send_service(Service::PL_WakeUp).await;
         pl.handle_service().await;
-        let result = RESULT_CHANNEL.receive().await;
+        let result = services::receive_service_result().await;
         assert_eq!(result, ServiceResult::PL_WakeUp);
     }
 
@@ -205,14 +160,14 @@ mod tests {
 
         let mut pl = PL::new(mock_actions);
 
-        SERVICE_CHANNEL.send(Service::PL_Transfer {
+        services::send_service(Service::PL_Transfer {
             data: [0u8; 32],
             data_length: 22,
             answer_length: 5,
         }).await;
 
         pl.handle_service().await;
-        let result = RESULT_CHANNEL.receive().await;
+        let result = services::receive_service_result().await;
         assert_eq!(result, ServiceResult::PL_Transfer { answer: [0u8; 32] });
     }
 
@@ -244,7 +199,7 @@ mod tests {
 
             let mut pl = PL::new(mock_actions);
             pl.wake_up().await;
-            let _ = RESULT_CHANNEL.receive().await;
+            let _ = services::receive_service_result().await;
         }
     }
 
@@ -265,6 +220,6 @@ mod tests {
 
         let mut pl = PL::new(mock_actions);
         pl.transfer(&test_data, test_answer_length).await;
-        let _ = RESULT_CHANNEL.receive().await;
+        let _ = services::receive_service_result().await;
     }
 }

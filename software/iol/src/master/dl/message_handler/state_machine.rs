@@ -13,6 +13,8 @@ use crate::common::annex_b::direct_parameter_page_1_and_2::address;
 use crate::master::dl::message_handler::m_sequences;
 use crate::master::pl;
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum State {
     #[allow(non_camel_case_types)]
     Inactive_0,
@@ -39,21 +41,19 @@ enum State {
     // ErrorHandling_17,
 }
 
-// TODO: Is this the right place for this enum? see also Table 9
-pub enum TransmissionRate {
-    //COM1 = 4800,
-    COM2 = 38400,
-    //COM3 = 230400,
-}
+// // TODO: Is this the right place for this enum? see also Table 9
+// pub enum TransmissionRate {
+//     //COM1 = 4800,
+//     COM2 = 38400,
+//     //COM3 = 230400,
+// }
 
 pub enum Event {
     #[allow(non_camel_case_types)]
-    MH_Conf_COMx(TransmissionRate),
+    MH_Conf_COMx {
+        transmission_rate: u32,
+    },
 }
-
-// pub trait Actions {
-//     fn 
-// }
 
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, (), 1> = Channel::new();
@@ -84,42 +84,38 @@ impl StateMachine {
     }
 
     async fn next(&mut self) {
+        info!("{:?}", self.state);
         match self.state {
             State::Inactive_0 => {
                 let event = self.await_event().await;
                 match event {
-                    Event::MH_Conf_COMx(rate) => {
-                        match rate {
-                            TransmissionRate::COM2 => {
-                                info!("MH_Conf_COMx with transmission Rate COM2");
-                                // Send a message with the requested transmission rate of COMx and with
-                                // M-sequence TYPE_0: Read Direct Parameter page 1, address 0x02
-                                // ("MinCycleTime"), compiling into an M-sequence control MC = 0xA2 (see
-                                // A.1.2). Start timer with T M-sequence .
+                    Event::MH_Conf_COMx { transmission_rate } => {
+                        // Send a message with the requested transmission rate of COMx and with
+                        // M-sequence TYPE_0: Read Direct Parameter page 1, address 0x02
+                        // ("MinCycleTime"), compiling into an M-sequence control MC = 0xA2 (see
+                        // A.1.2). Start timer with T M-sequence .
 
-                                let m_sequence = m_sequences::TYPE_0::new(m_sequences::CommunicationChannel::Page, address::MinCycleTime);
+                        let m_sequence = m_sequences::TYPE_0::new(m_sequences::CommunicationChannel::Page, address::MinCycleTime);
 
-                                pl::SERVICE_CHANNEL.send(
-                                    pl::Service::PL_Transfer {
-                                        data: {
-                                            let mut buf = [0u8; 32];
-                                            let msg = &m_sequence.master_message;
-                                            buf[..msg.len()].copy_from_slice(msg);
-                                            buf
-                                        },
-                                        data_length: m_sequence.master_message.len(),
-                                        answer_length: m_sequence.answer_length
-                                    }
-                                ).await;
-
-                                let _answer = pl::RESULT_CHANNEL.receive().await;
-                                // if let pl::ServiceResult::PL_Transfer { .. } = answer {
-                                //     for item in answer {
-                                //         info!("answer[{}]: {:?}", i, item);
-                                //     }
-                                // }
+                        pl::services::send_service(
+                            pl::Service::PL_Transfer {
+                                data: {
+                                    let mut buf = [0u8; 32];
+                                    let msg = &m_sequence.master_message;
+                                    buf[..msg.len()].copy_from_slice(msg);
+                                    buf
+                                },
+                                data_length: m_sequence.master_message.len(),
+                                answer_length: m_sequence.answer_length
                             }
-                        }
+                        ).await;
+
+                        let _answer = pl::services::receive_service_result().await;
+                        // if let pl::ServiceResult::PL_Transfer { .. } = answer {
+                        //     for item in answer {
+                        //         info!("answer[{}]: {:?}", i, item);
+                        //     }
+                        // }
                     }
                 }
             },

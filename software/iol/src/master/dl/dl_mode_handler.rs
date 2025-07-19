@@ -13,6 +13,7 @@ use crate::master::dl::dl_services::{Service, ServiceResult};
 use crate::master::dl::dl_services::inside_dl::*;
 use crate::master::dl::dl_services::{dl_set_mode, dl_mode};
 use crate::master::pl;
+use crate::master::pl::dynamic_characteristic_of_the_transmission as com_properties;
 use crate::master::dl::message_handler as mh;
 
 use wake_up_procedure_and_retry_characteristics as wake_up_properties;
@@ -158,8 +159,8 @@ impl<A: Actions> StateMachine<A> {
                 self.state = State::WURQ_5;
             },
             State::WURQ_5 => {
-                pl::SERVICE_CHANNEL.send(pl::Service::PL_WakeUp).await;
-                let result = pl::RESULT_CHANNEL.receive().await;
+                pl::services::send_service(pl::Service::PL_WakeUp).await;
+                let result = pl::services::receive_service_result().await;
                 if result != pl::ServiceResult::PL_WakeUp {
                     panic!("unexpected result: {:?}", result);
                 }
@@ -168,18 +169,23 @@ impl<A: Actions> StateMachine<A> {
             },
             State::ComRequestCOM3_6 => {
                 self.actions.wait(wake_up_properties::com3::T_DMT).await;
+
+                mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx {
+                    transmission_rate: com_properties::com3::F_DTR,
+                }).await;
+
+                // hier weiter
+                mh::RESULT_CHANNEL.receive().await;
+
                 // TODO: we jump right to COM2 => fix
                 send_service(Service::DL_Mode(dl_mode::RealMode::COM2)).await;
                 self.state = State::ComRequestCOM2_7;
             },
             State::ComRequestCOM2_7 => {
-                // TODO: T_DMT is 32 * T_BIT which results in about 833us for COM2. We try 1ms
-                // const T_DMT: Duration = Duration::from_millis(1);
-                // self.actions.wait(T_DMT).await;
-                // ComRequest
-
                 self.actions.wait(wake_up_properties::com2::T_DMT).await;
-                mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx(mh::TransmissionRate::COM2)).await;
+                mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx {
+                    transmission_rate: com_properties::com2::F_DTR,
+                }).await;
                 mh::RESULT_CHANNEL.receive().await;
 
                 self.state = State::ComRequestCOM1_8; // TODO: implement the other exit
