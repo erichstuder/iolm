@@ -6,42 +6,46 @@ use defmt::*;
 use embassy_executor::{Spawner, main, task};
 use embassy_stm32::gpio::{Output, Level, Speed};
 use embassy_stm32::i2c::{self, I2c};
-use embassy_stm32::mode::Async;
 use embassy_stm32::bind_interrupts;
 use embassy_stm32::peripherals;
 use embassy_stm32::time::Hertz;
 use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
 
-use l6360::{self, L6360, HardwareAccess};
+use l6360;
 use iol::master::{self, smi};
 
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-mod l6360_hw;
-use l6360_hw::L6360_HW;
+mod iol_transceiver;
+use iol_transceiver::IOL_Transceiver;
 
 mod iol_master_actions;
 use iol_master_actions::MasterActions;
 
-static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>, L6360_HW>>> = Mutex::new(None);
+// static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<L6360<I2c<Async>>>> = Mutex::new(None);
+static IOL_TRANSCEIVER: Mutex<CriticalSectionRawMutex, Option<IOL_Transceiver>> = Mutex::new(None);
 
 #[main]
 async fn main(spawner: Spawner) {
+    // let p = embassy_stm32::init(Default::default());
+    // heartbeat_led(spawner, p.PA5);
+    // *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, 0b1100_000, config).unwrap());
+
     setup_hardware(spawner).await;
 
     // initialize iol transceiver
     let mut iol_transceiver_ref = IOL_TRANSCEIVER.lock().await;
     let iol_transceiver = iol_transceiver_ref.as_mut().unwrap();
-    iol_transceiver.init().await.unwrap();
+    //iol_transceiver.init().await.unwrap();
 
     // set some blink pattern (just for fun)
-    iol_transceiver.set_led_pattern(l6360::Led::LED1, 0xFFF0).await.unwrap();
-    iol_transceiver.set_led_pattern(l6360::Led::LED2, 0x000F).await.unwrap();
+    iol_transceiver.set_led_pattern(l6360::Led::LED1, 0xFFF0).await;
+    iol_transceiver.set_led_pattern(l6360::Led::LED2, 0x000F).await;
 
     // power the connected iol-device
-    iol_transceiver.hw.enl_plus(l6360::PinState::High);
+    iol_transceiver.enl_plus(l6360::PinState::High);
     //spawner.spawn(measure_ready_pulse(l6360.pins.out_cq)).unwrap();
     drop(iol_transceiver_ref);
 
@@ -120,16 +124,17 @@ async fn setup_hardware(spawner: Spawner) {
         },
     );
 
-    let l6360_hw = L6360_HW::new(p.USART1, p.PA9, p.PA10, p.PA6, p.PC0);
+    let iol_transceiver = IOL_Transceiver::new(i2c, p.USART1, p.DMA2_CH7, p.DMA2_CH2, p.PA9, p.PA10, p.PA6, p.PC0).await;
 
-    let config = l6360::Config {
-        configuration_register: l6360::ConfigurationRegister {
-            cq_output_stage_configuration: l6360::CqOutputStageConfiguration::PushPull,
-        },
-        control_register_1: l6360::ControlRegister1 {
-            en_cgq_cq_pull_down: l6360::EN_CGQ_CQ_PullDown::ON_IfEnCq0,
-        }
-    };
+    // let config = l6360::Config {
+    //     configuration_register: l6360::ConfigurationRegister {
+    //         cq_output_stage_configuration: l6360::CqOutputStageConfiguration::PushPull,
+    //     },
+    //     control_register_1: l6360::ControlRegister1 {
+    //         en_cgq_cq_pull_down: l6360::EN_CGQ_CQ_PullDown::ON_IfEnCq0,
+    //     }
+    // };
 
-    *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, l6360_hw, 0b1100_000, config).unwrap());
+    // *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, 0b1100_000, config).unwrap());
+    *IOL_TRANSCEIVER.lock().await = Some(iol_transceiver);
 }

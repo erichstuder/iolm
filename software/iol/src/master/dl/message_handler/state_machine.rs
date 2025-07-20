@@ -13,6 +13,7 @@ use crate::common::annex_b::direct_parameter_page_1_and_2::address;
 use crate::master::dl::message_handler::m_sequences;
 use crate::master::pl;
 use crate::master::pl::dynamic_characteristic_of_the_transmission as com_properties;
+use core::time::Duration;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -59,14 +60,21 @@ pub enum Event {
 pub static EVENT_CHANNEL: Channel<CriticalSectionRawMutex, Event, 1> = Channel::new();
 pub static RESULT_CHANNEL: Channel<CriticalSectionRawMutex, (), 1> = Channel::new();
 
-pub struct StateMachine {
-    state: State,
+pub trait Actions {
+    #[allow(async_fn_in_trait)]
+    async fn wait(&self, duration: Duration);
 }
 
-impl StateMachine {
-    pub fn new() -> Self {
+pub struct StateMachine<A> {
+    state: State,
+    actions: A,
+}
+
+impl<A: Actions> StateMachine<A> {
+    pub fn new(actions: A) -> Self {
         Self {
             state: State::Inactive_0,
+            actions,
         }
     }
 
@@ -112,13 +120,22 @@ impl StateMachine {
                                 answer_length: m_sequence.answer_length
                             }
                         ).await;
-                        let _answer = pl::services::receive_service_result().await;
+                        info!("wait on answer of test message");
+                        self.actions.wait(Duration::from_millis(10)).await; //TODO: set right time
+                        match pl::services::service_result_is_ready() {
+                            true => {
+                                let _answer = pl::services::receive_service_result().await;
+                                info!("answer on test message received");
+                            }
+                            false => {
+                                info!("answer on test message timedouttttttttttttttttt");
+                            }
+                        }
                         // if let pl::ServiceResult::PL_Transfer { .. } = answer {
                         //     for item in answer {
                         //         info!("answer[{}]: {:?}", i, item);
                         //     }
                         // }
-
                         self.confirm_event().await;
                     }
                 }

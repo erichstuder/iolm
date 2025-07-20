@@ -70,6 +70,18 @@ pub fn calculate_checksum(message: &mut [u8]) {
     message[1] |= checksum;
 }
 
+// see A.3.5
+pub mod timing_constraints {
+    use core::time::Duration;
+
+    // Note: As far as I currently understand the "Response time of Devices" isn't directly checked.
+    //       But it is indirectly checked via the check of M-sequence time. see A.3.6
+    pub const fn response_time_of_device_max(baudrate: u32) -> Duration {
+        let t_bit = 1f64/(baudrate as f64);
+        Duration::from_nanos((10f64 * 1e9f64 * t_bit) as u64)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -3,7 +3,7 @@
 //! see
 //! - [#5.2- IO-Link Specification](../../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=42)
 
-use embassy_sync::channel::Channel;
+use embassy_sync::channel::{Channel, TryReceiveError};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 pub mod outside_pl {
@@ -13,6 +13,10 @@ pub mod outside_pl {
 
     pub async fn receive_service_result() -> super::ServiceResult {
         super::RESULT_FROM_PL.receive().await
+    }
+
+    pub fn service_result_is_ready() -> bool {
+        !super::RESULT_FROM_PL.is_empty()
     }
 }
 
@@ -47,7 +51,7 @@ pub enum ServiceResult {
     #[allow(non_camel_case_types)]
     PL_WakeUp,
     #[allow(non_camel_case_types)]
-    PL_Transfer{ answer: [u8; 32] },
+    PL_Transfer(Result<[u8; 32], pl_transfer::Fail>),
 }
 
 pub mod pl_set_mode {
@@ -61,5 +65,16 @@ pub mod pl_set_mode {
         COM1,
         COM2,
         COM3,
+    }
+}
+
+pub mod pl_transfer {
+    #[derive(PartialEq, Debug)]
+    pub enum Fail {
+        #[allow(non_camel_case_types)]
+        PARITY_ERROR,
+        #[allow(non_camel_case_types)]
+        FRAMING_ERROR,
+        OVERRUN,
     }
 }

@@ -2,10 +2,10 @@
 //!
 //! see [#5 - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=41)
 
-#[cfg(feature = "log")]
-use log::info;
-#[cfg(feature = "defmt")]
-use defmt::info;
+// #[cfg(feature = "log")]
+// use log::info;
+// #[cfg(feature = "defmt")]
+// use defmt::info;
 
 #[cfg(test)]
 use mockall::automock;
@@ -17,6 +17,7 @@ pub use embedded_hal::digital::PinState;
 mod pl_services;
 pub use pl_services::outside_pl as services;
 pub use pl_services::{Service, ServiceResult, pl_set_mode};
+pub use pl_services::pl_transfer::Fail as TransferError;
 use pl_services::inside_dl::*;
 
 use dynamic_characteristic_of_the_transmission as com_properties;
@@ -42,7 +43,7 @@ pub trait Actions {
     async fn set_baudrate(&self, baudrate: u32);
 
     #[allow(async_fn_in_trait)]
-    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError>;
 }
 
 pub struct PL<A: Actions> {
@@ -100,9 +101,11 @@ impl<A: Actions> PL<A> {
 
     async fn transfer(&mut self, data: &[u8], answer_length: usize) {
         let mut answer = [0u8; 32];
-        self.actions.exchange_data(data, &mut answer[0..answer_length]).await;
-        info!("reading done");
-        send_service_result(ServiceResult::PL_Transfer { answer }).await;
+        let result = self.actions.exchange_data(data, &mut answer[0..answer_length]).await;
+        match result {
+            Ok(()) => send_service_result(ServiceResult::PL_Transfer(Ok(answer))).await,
+            Err(e) => send_service_result(ServiceResult::PL_Transfer(Err(e))).await,
+        }
     }
 }
 
@@ -171,7 +174,7 @@ mod tests {
         // Just check that the call happens.
         mock_actions.expect_exchange_data()
             .times(1)
-            .returning(|_,_| ());
+            .returning(|_,_| Ok(()));
 
         let mut pl = PL::new(mock_actions);
 
@@ -183,7 +186,7 @@ mod tests {
 
         pl.handle_service().await;
         let result = services::receive_service_result().await;
-        assert_eq!(result, ServiceResult::PL_Transfer { answer: [0u8; 32] });
+        assert_eq!(result, ServiceResult::PL_Transfer(Ok([0u8; 32])));
     }
 
     #[tokio::test]
@@ -231,7 +234,7 @@ mod tests {
                 data == &test_data[..] &&
                 answer.len() == test_answer_length
             })
-            .returning(|_,_| ());
+            .returning(|_,_| Ok(()));
 
         let mut pl = PL::new(mock_actions);
         pl.transfer(&test_data, test_answer_length).await;

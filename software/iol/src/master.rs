@@ -18,7 +18,7 @@ pub type PortPowerSwitchingStateMachine<A> = port_power_switching::StateMachine<
 
 mod pl;
 use pl::PL;
-pub use pl::WakeUpPulseDirection;
+pub use pl::{WakeUpPulseDirection, TransferError};
 pub use pl::PinState;
 
 mod dl;
@@ -54,7 +54,7 @@ pub trait Actions {
     async fn set_baudrate(&self, baudrate: u32);
 
     #[allow(async_fn_in_trait)]
-    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError>;
 }
 
 pub struct PlActions<A: Actions> {
@@ -78,8 +78,8 @@ impl<A: Actions> pl::Actions for PlActions<A> {
         self.actions.set_baudrate(baudrate).await;
     }
 
-    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
-        self.actions.exchange_data(data, answer).await;
+    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError> {
+        self.actions.exchange_data(data, answer).await
     }
 }
 

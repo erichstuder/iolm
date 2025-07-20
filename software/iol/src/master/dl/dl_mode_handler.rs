@@ -162,7 +162,7 @@ impl<A: Actions> StateMachine<A> {
                 if result != pl::ServiceResult::PL_WakeUp {
                     panic!("unexpected result: {:?}", result);
                 }
-                self.state = State::ComRequestCOM2_7; // TODO: jump to COM3
+                self.state = State::ComRequestCOM3_6;
             },
             State::ComRequestCOM3_6 => {
                 self.actions.wait(wake_up_properties::com3::T_DMT).await;
@@ -186,11 +186,15 @@ impl<A: Actions> StateMachine<A> {
                 // send_service(Service::DL_Mode(dl_mode::RealMode::STARTUP)).await;
             },
             State::ComRequestCOM2_7 => {
+                info!("1");
                 self.actions.wait(wake_up_properties::com2::T_DMT).await;
+                info!("2");
                 mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx {
                     transmission_rate: com_properties::com2::F_DTR,
                 }).await;
+                info!("3");
                 mh::RESULT_CHANNEL.receive().await;
+                info!("4");
 
                 self.state = State::ComRequestCOM1_8; // TODO: implement the other exit
 

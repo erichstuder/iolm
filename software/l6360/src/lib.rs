@@ -3,9 +3,6 @@
 
 #![cfg_attr(not(test), no_std)]
 
-#[cfg(test)]
-use mockall::automock;
-
 //#[cfg(feature = "log")]
 //use log::info;
 //#[cfg(feature = "defmt")]
@@ -16,16 +13,16 @@ use num_enum::TryFromPrimitive;
 pub use embedded_hal::digital::PinState;
 
 /// Implementations for hardware access.
-#[cfg_attr(test, automock)]
-pub trait HardwareAccess {
-    fn enl_plus(&mut self, level: PinState);
-    fn en_cq(&mut self, level: PinState);
-    fn in_cq(&mut self, level: PinState);
-    fn out_cq(&self) -> PinState;
-    fn set_baudrate(&self, baudrate: u32);
-    #[allow(async_fn_in_trait)]
-    async fn exchange(&mut self, data: &[u8], answer: &mut [u8]);
-}
+// #[cfg_attr(test, automock)]
+// pub trait HardwareAccess {
+//     fn enl_plus(&mut self, level: PinState);
+//     fn en_cq(&mut self, level: PinState);
+//     fn in_cq(&mut self, level: PinState);
+//     fn out_cq(&self) -> PinState;
+//     fn set_baudrate(&mut self, baudrate: u32);
+//     #[allow(async_fn_in_trait)]
+//     async fn exchange(&mut self, data: &[u8], answer: &mut [u8])/* -> Result<(), ReadTimeout> */;
+// }
 
 enum RegisterAddress {
     // Status        = 0b0000,
@@ -113,19 +110,13 @@ type L6360result<T, I2C> = Result<T, Error<<I2C as i2c::ErrorType>::Error>>;
 
 /// Struct for the L6360
 /// Use [`L6360::new`] to create an instance of this struct.
-pub struct L6360<I2C, HW> {
+pub struct L6360<I2C> {
     i2c: I2C,
-    /// Hardware can be accessed via this field containig the concrete implementations.
-    pub hw: HW,
     address_7bit: i2c::SevenBitAddress,
     config: Config,
 }
 
-impl<I2C, HW> L6360<I2C, HW>
-where
-    I2C: I2c,
-    HW: HardwareAccess,
-{
+impl<I2C: I2c> L6360<I2C> {
     /// Creates a new instance of the L6360 driver.
     ///
     /// # Arguments
@@ -138,14 +129,13 @@ where
     /// # Returns
     ///
     /// A result containing the L6360 instance or an error.
-    pub fn new(i2c: I2C, hw: HW, address_7bit: i2c::SevenBitAddress, config: Config) -> L6360result<Self, I2C> {
+    pub fn new(i2c: I2C, address_7bit: i2c::SevenBitAddress, config: Config) -> L6360result<Self, I2C> {
         if !(0b0_1100_000..=0b0_1100_111).contains(&address_7bit) {
             return Err(Error::Invalid7bitAddress);
         }
 
         Ok(Self {
             i2c,
-            hw,
             address_7bit,
             config,
         })
@@ -284,9 +274,8 @@ mod tests {
     fn test_new() {
         for address in 0..=255 {
             let mock_i2c = MockI2c::new();
-            let mock_hw = MockHardwareAccess::new();
             let config = Config::default();
-            let result = L6360::new(mock_i2c, mock_hw, address, config);
+            let result = L6360::new(mock_i2c, address, config);
             if address < 0b0_1100_000 || address > 0b0_1100_111 {
                 assert!(result.is_err(), "L6360::new returned ok, with address: {:?}", address);
             }
@@ -306,7 +295,6 @@ mod tests {
 
         for (en_cgq_cq_pulldown, reg_value) in expected.iter() {
             let mut mock_i2c = MockI2c::new();
-            let mock_hw = MockHardwareAccess::new();
             let i2c_address = 0b0_1100_111;
             let config = Config {
                 control_register_1: ControlRegister1 {
@@ -329,7 +317,7 @@ mod tests {
                 })
                 .returning(|_, _| Ok(()));
 
-            let mut l6360 = L6360::new(mock_i2c, mock_hw, i2c_address, config).unwrap();
+            let mut l6360 = L6360::new(mock_i2c, i2c_address, config).unwrap();
             l6360.init().await.unwrap();
         }
     }
@@ -357,7 +345,6 @@ mod tests {
             ]
             {
                 let mut mock_i2c = MockI2c::new();
-                let mock_hw = MockHardwareAccess::new();
                 let i2c_address = 0b0_1100_111;
 
                 // expect set of start register address
@@ -410,7 +397,7 @@ mod tests {
                     })
                     .returning(|_, _| Ok(()));
 
-                let mut l6360 = L6360::new(mock_i2c, mock_hw, i2c_address, Config::default()).unwrap();
+                let mut l6360 = L6360::new(mock_i2c, i2c_address, Config::default()).unwrap();
                 l6360.set_cq_out_stage_configuration(new_config).await.unwrap();
             }
         }
@@ -435,7 +422,6 @@ mod tests {
             test_cnt += 1;
 
             let mut mock_i2c = MockI2c::new();
-            let mock_hw = MockHardwareAccess::new();
 
             mock_i2c.expect_write().times(1)
                 .withf(move |address, bytes| {
@@ -455,7 +441,7 @@ mod tests {
                 })
                 .returning(|_, _| Ok(()));
 
-            let mut l63601 = L6360::new(mock_i2c, mock_hw, *i2c_address, Config::default()).unwrap();
+            let mut l63601 = L6360::new(mock_i2c, *i2c_address, Config::default()).unwrap();
             l63601.set_led_pattern(*led, *pattern).await.unwrap();
         }
     }
@@ -487,7 +473,7 @@ mod tests {
         println!("|:----------:|:--------:|");
         for (data, expected) in test_cases {
             println!("| 0b{:08b} |   0b{:03b}  |", data, expected);
-            assert_eq!(L6360::<MockI2c, MockHardwareAccess>::calculate_parity(*data), *expected);
+            assert_eq!(L6360::<MockI2c>::calculate_parity(*data), *expected);
         }
     }
 }

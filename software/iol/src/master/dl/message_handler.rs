@@ -1,18 +1,18 @@
 mod state_machine;
 pub use state_machine::EVENT_CHANNEL;
 pub use state_machine::RESULT_CHANNEL;
-pub use state_machine::Event;
+pub use state_machine::{Event, Actions};
 
 mod m_sequences;
 
-pub struct MessageHandler {
-    state_machine: state_machine::StateMachine,
+pub struct MessageHandler<A> {
+    state_machine: state_machine::StateMachine<A>,
 }
 
-impl MessageHandler {
-    pub fn new() -> Self {
+impl<A: Actions> MessageHandler<A> {
+    pub fn new(actions: A) -> Self {
         Self {
-            state_machine: state_machine::StateMachine::new(),
+            state_machine: state_machine::StateMachine::new(actions),
         }
     }
 

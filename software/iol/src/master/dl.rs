@@ -73,6 +73,16 @@ impl<A: Actions> dl_mode_handler::Actions for DlModeHandlerActionsImpl<A> {
     }
 }
 
+pub struct MessageHandlerActionsImpl<A: Actions> {
+    pub actions: A,
+}
+
+impl<A: Actions> message_handler::Actions for MessageHandlerActionsImpl<A> {
+    async fn wait(&self, duration: Duration) {
+        self.actions.wait(duration).await;
+    }
+}
+
 pub struct DL<A:Actions> {
     // m_sequence_time: MSequenceTime,
     // m_sequence_type: MSequenceType,
@@ -82,7 +92,7 @@ pub struct DL<A:Actions> {
 
     _actions: A, //unused at the moment, maybe later
     dl_mode_handler: dl_mode_handler::StateMachine<DlModeHandlerActionsImpl<A>>,
-    message_handler: message_handler::MessageHandler,
+    message_handler: message_handler::MessageHandler<MessageHandlerActionsImpl<A>>,
 }
 
 impl<A: Actions + Copy> DL<A> {
@@ -90,7 +100,7 @@ impl<A: Actions + Copy> DL<A> {
         Self {
             _actions: actions,
             dl_mode_handler: dl_mode_handler::StateMachine::new(DlModeHandlerActionsImpl{ actions }),
-            message_handler: message_handler::MessageHandler::new(),
+            message_handler: message_handler::MessageHandler::new(MessageHandlerActionsImpl { actions }),
         }
     }
 
