@@ -22,6 +22,7 @@ pub trait HardwareAccess {
     fn en_cq(&mut self, level: PinState);
     fn in_cq(&mut self, level: PinState);
     fn out_cq(&self) -> PinState;
+    fn set_baudrate(&self, baudrate: u32);
     #[allow(async_fn_in_trait)]
     async fn exchange(&mut self, data: &[u8], answer: &mut [u8]);
 }

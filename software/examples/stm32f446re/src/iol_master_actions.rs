@@ -111,6 +111,15 @@ impl master::Actions for MasterActions {
         }
     }
 
+    async fn set_baudrate(&self, baudrate: u32) {
+        if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
+            if l6360.hw.get_mode() != l6360_hw::Mode::Uart {
+                l6360.hw.switch_to_uart();
+            }
+            l6360.hw.set_baudrate(baudrate);
+        }
+    }
+
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {
         if let Some(l6360) = IOL_TRANSCEIVER.lock().await.as_mut() {
             if l6360.hw.get_mode() != l6360_hw::Mode::Uart {

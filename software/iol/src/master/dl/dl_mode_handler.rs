@@ -12,9 +12,9 @@ use defmt::info;
 use crate::master::dl::dl_services::{Service, ServiceResult};
 use crate::master::dl::dl_services::inside_dl::*;
 use crate::master::dl::dl_services::{dl_set_mode, dl_mode};
+use crate::master::dl::message_handler as mh;
 use crate::master::pl;
 use crate::master::pl::dynamic_characteristic_of_the_transmission as com_properties;
-use crate::master::dl::message_handler as mh;
 
 use wake_up_procedure_and_retry_characteristics as wake_up_properties;
 use core::time::Duration;
@@ -152,8 +152,6 @@ impl<A: Actions> StateMachine<A> {
                         self.state = State::Idle_0;
                     }
                 }
-
-                self.actions.wait(Duration::from_secs(1)).await; //TODO:remove
             },
             State::EstablishCom_1 => {
                 self.state = State::WURQ_5;
@@ -164,22 +162,28 @@ impl<A: Actions> StateMachine<A> {
                 if result != pl::ServiceResult::PL_WakeUp {
                     panic!("unexpected result: {:?}", result);
                 }
-                send_service(Service::DL_Mode(dl_mode::RealMode::COM3)).await;
-                self.state = State::ComRequestCOM3_6;
+                self.state = State::ComRequestCOM2_7; // TODO: jump to COM3
             },
             State::ComRequestCOM3_6 => {
                 self.actions.wait(wake_up_properties::com3::T_DMT).await;
 
+                // Note: There is some confusion.
+                // On the one hand it says: "Set transmission rate ..." in T15 to T17 of DL-mode handler.
+                // On the other hand T1 of the message handler says: "Send a message with the requested transmission rate ...".
+                // So it is not clear whether to set the transmission rate here or in message handler.
+                // As it feels cleaner the transmission rate is set there.
+
                 mh::EVENT_CHANNEL.send(mh::Event::MH_Conf_COMx {
                     transmission_rate: com_properties::com3::F_DTR,
                 }).await;
-
-                // hier weiter
                 mh::RESULT_CHANNEL.receive().await;
 
                 // TODO: we jump right to COM2 => fix
-                send_service(Service::DL_Mode(dl_mode::RealMode::COM2)).await;
                 self.state = State::ComRequestCOM2_7;
+
+                // if success then:
+                // send_service(Service::DL_Mode(dl_mode::RealMode::COM3)).await;
+                // send_service(Service::DL_Mode(dl_mode::RealMode::STARTUP)).await;
             },
             State::ComRequestCOM2_7 => {
                 self.actions.wait(wake_up_properties::com2::T_DMT).await;
@@ -191,6 +195,10 @@ impl<A: Actions> StateMachine<A> {
                 self.state = State::ComRequestCOM1_8; // TODO: implement the other exit
 
                 self.actions.wait(Duration::from_secs(100)).await;// dummy wait
+
+                // if success then:
+                // send_service(Service::DL_Mode(dl_mode::RealMode::COM2)).await;
+                // send_service(Service::DL_Mode(dl_mode::RealMode::STARTUP)).await;
             }
             State::ComRequestCOM1_8 => {
                 self.actions.wait(wake_up_properties::com1::T_DMT).await;
@@ -198,6 +206,10 @@ impl<A: Actions> StateMachine<A> {
                 self.actions.wait(Duration::from_secs(10)).await; // dummy wait
 
                 self.state = State::Retry_9; // dummy state change
+
+                // if success then:
+                // send_service(Service::DL_Mode(dl_mode::RealMode::COM1)).await;
+                // send_service(Service::DL_Mode(dl_mode::RealMode::STARTUP)).await;
             },
             State::Retry_9 => {
                 self.actions.wait(Duration::from_secs(10)).await; // dummy wait

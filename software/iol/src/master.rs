@@ -51,6 +51,9 @@ pub trait Actions {
     async fn await_ready_pulse_with_timeout(&self, duration: Duration) -> ReadyPulseResult;
 
     #[allow(async_fn_in_trait)]
+    async fn set_baudrate(&self, baudrate: u32);
+
+    #[allow(async_fn_in_trait)]
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
 }
 
@@ -69,6 +72,10 @@ impl<A: Actions> pl::Actions for PlActions<A> {
 
     async fn wake_up_pulse(&self, direction: WakeUpPulseDirection) {
         self.actions.wake_up_pulse(direction).await
+    }
+
+    async fn set_baudrate(&self, baudrate: u32) {
+        self.actions.set_baudrate(baudrate).await;
     }
 
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) {

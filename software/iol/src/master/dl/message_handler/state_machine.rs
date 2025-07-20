@@ -12,6 +12,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use crate::common::annex_b::direct_parameter_page_1_and_2::address;
 use crate::master::dl::message_handler::m_sequences;
 use crate::master::pl;
+use crate::master::pl::dynamic_characteristic_of_the_transmission as com_properties;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -90,10 +91,12 @@ impl StateMachine {
                 let event = self.await_event().await;
                 match event {
                     Event::MH_Conf_COMx { transmission_rate } => {
-                        // Send a message with the requested transmission rate of COMx and with
-                        // M-sequence TYPE_0: Read Direct Parameter page 1, address 0x02
-                        // ("MinCycleTime"), compiling into an M-sequence control MC = 0xA2 (see
-                        // A.1.2). Start timer with T M-sequence .
+                        match transmission_rate {
+                            com_properties::com1::F_DTR => pl::services::send_service(pl::Service::PL_SetMode(pl::pl_set_mode::TargetMode::COM1)).await,
+                            com_properties::com2::F_DTR => pl::services::send_service(pl::Service::PL_SetMode(pl::pl_set_mode::TargetMode::COM2)).await,
+                            com_properties::com3::F_DTR => pl::services::send_service(pl::Service::PL_SetMode(pl::pl_set_mode::TargetMode::COM3)).await,
+                            _ => panic!("unknown baudrate"),
+                        }
 
                         let m_sequence = m_sequences::TYPE_0::new(m_sequences::CommunicationChannel::Page, address::MinCycleTime);
 
@@ -109,13 +112,14 @@ impl StateMachine {
                                 answer_length: m_sequence.answer_length
                             }
                         ).await;
-
                         let _answer = pl::services::receive_service_result().await;
                         // if let pl::ServiceResult::PL_Transfer { .. } = answer {
                         //     for item in answer {
                         //         info!("answer[{}]: {:?}", i, item);
                         //     }
                         // }
+
+                        self.confirm_event().await;
                     }
                 }
             },

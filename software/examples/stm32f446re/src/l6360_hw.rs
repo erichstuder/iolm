@@ -63,7 +63,7 @@ impl<'a> L6360_HW<'a> {
         drop(self.out_cq.take());
 
         let mut config = usart::Config::default();
-        config.baudrate = 38_400; //TODO: COM2 for the moment but fix it!
+        config.baudrate = 9600; // just a random value
         config.data_bits = usart::DataBits::DataBits8;
         config.stop_bits = usart::StopBits::STOP1;
         config.parity = usart::Parity::ParityEven;
@@ -116,7 +116,11 @@ impl<'a> l6360::HardwareAccess for L6360_HW<'a> {
         }
     }
 
-    async fn exchange(&mut self, data: &[u8], answer: &mut [u8]) {
+    fn set_baudrate(&self, baudrate: u32) {
+        self.uart.as_ref().unwrap().set_baudrate(baudrate).unwrap();
+    }
+
+    async fn exchange(&mut self, data: &[u8], answer: &mut [u8]) { // TODO: does this function have to be async?
         self.en_cq(l6360::PinState::High);
         self.uart.as_mut().unwrap().blocking_write(data).unwrap();
         self.uart.as_mut().unwrap().blocking_flush().unwrap();

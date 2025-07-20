@@ -16,8 +16,10 @@ pub use embedded_hal::digital::PinState;
 
 mod pl_services;
 pub use pl_services::outside_pl as services;
-pub use pl_services::{Service, ServiceResult};
+pub use pl_services::{Service, ServiceResult, pl_set_mode};
 use pl_services::inside_dl::*;
+
+use dynamic_characteristic_of_the_transmission as com_properties;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum WakeUpPulseDirection {
@@ -35,6 +37,9 @@ pub trait Actions {
 
     #[allow(async_fn_in_trait)]
     async fn wake_up_pulse(&self, direction: WakeUpPulseDirection);
+
+    #[allow(async_fn_in_trait)]
+    async fn set_baudrate(&self, baudrate: u32);
 
     #[allow(async_fn_in_trait)]
     async fn exchange_data(&self, data: &[u8], answer: &mut [u8]);
@@ -60,6 +65,16 @@ impl<A: Actions> PL<A> {
 
     async fn handle_service(&mut self) {
         match receive_service().await {
+            Service::PL_SetMode(target_mode) => {
+                match target_mode {
+                    pl_set_mode::TargetMode::INACTIVE => { /* TODO: implement */ },
+                    pl_set_mode::TargetMode::DI => { /* TODO: implement */ },
+                    pl_set_mode::TargetMode::DO => { /* TODO: implement */ },
+                    pl_set_mode::TargetMode::COM1 => self.actions.set_baudrate(com_properties::com1::F_DTR).await,
+                    pl_set_mode::TargetMode::COM2 => self.actions.set_baudrate(com_properties::com2::F_DTR).await,
+                    pl_set_mode::TargetMode::COM3 => self.actions.set_baudrate(com_properties::com3::F_DTR).await,
+                }
+            }
             Service::PL_WakeUp => self.wake_up().await,
             Service::PL_Transfer { data, data_length, answer_length } => { self.transfer(&data[0..data_length], answer_length).await; }
         }

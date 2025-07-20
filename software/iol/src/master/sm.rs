@@ -24,7 +24,9 @@ enum State {
     CheckCompatibility_1,
     #[allow(non_camel_case_types)]
     DIDO_8,
-    // JoinPseudoState_9 is not used. Instead an additional state to await DL_Mode_STARTUP is added between state 0 and 1
+
+    // JoinPseudoState_9 is not used.
+    // Instead an additional state to await DL_Mode_STARTUP is added between state 0 and 1
     AwaitStartup,
 
     // there is more

@@ -30,7 +30,8 @@ static SERVICE_TO_PL: Channel<CriticalSectionRawMutex, Service, 1> = Channel::ne
 static RESULT_FROM_PL: Channel<CriticalSectionRawMutex, ServiceResult, 1> = Channel::new();
 
 pub enum Service {
-    //PL_SetMode,
+    #[allow(non_camel_case_types)]
+    PL_SetMode(pl_set_mode::TargetMode),
     #[allow(non_camel_case_types)]
     PL_WakeUp,
     #[allow(non_camel_case_types)]
@@ -47,4 +48,18 @@ pub enum ServiceResult {
     PL_WakeUp,
     #[allow(non_camel_case_types)]
     PL_Transfer{ answer: [u8; 32] },
+}
+
+pub mod pl_set_mode {
+    pub enum TargetMode {
+        #[allow(unused)] // TODO: remove
+        INACTIVE,
+        #[allow(unused)] // TODO: remove
+        DI,
+        #[allow(unused)] // TODO: remove
+        DO,
+        COM1,
+        COM2,
+        COM3,
+    }
 }
