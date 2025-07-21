@@ -115,12 +115,25 @@ impl iol::master::Actions for MasterActions {
         }
     }
 
-    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), iol::master::TransferError> {
+    async fn send_data(&self, data: &[u8]) -> Result<(), iol::master::TransferError> {
         if let Some(iol_transceiver) = IOL_TRANSCEIVER.lock().await.as_mut() {
             if iol_transceiver.get_mode() != iol_transceiver::Mode::Uart {
                 iol_transceiver.switch_to_uart();
             }
-            iol_transceiver.exchange(data, answer).await?;
+            iol_transceiver.send(data)?;
+        }
+        else {
+            crate::panic!("Lock to iol_transceiver failed"); //TODO: why is crate:: necessary here?
+        }
+        Ok(())
+    }
+
+    async fn try_receive_data(&self, answer: &mut Option<&mut [u8]>) -> Result<(), iol::master::TransferError> {
+        if let Some(iol_transceiver) = IOL_TRANSCEIVER.lock().await.as_mut() {
+            if iol_transceiver.get_mode() != iol_transceiver::Mode::Uart {
+                iol_transceiver.switch_to_uart();
+            }
+            iol_transceiver.try_receive(answer).await?;
         }
         else {
             crate::panic!("Lock to iol_transceiver failed"); //TODO: why is crate:: necessary here?

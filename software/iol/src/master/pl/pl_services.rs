@@ -25,6 +25,10 @@ pub mod inside_dl {
         super::SERVICE_TO_PL.receive().await
     }
 
+    pub fn service_pending() -> bool {
+        !super::SERVICE_TO_PL.is_empty()
+    }
+
     pub async fn send_service_result(result: super::ServiceResult) {
         super::RESULT_FROM_PL.send(result).await;
     }

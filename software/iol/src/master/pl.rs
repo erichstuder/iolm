@@ -2,10 +2,10 @@
 //!
 //! see [#5 - IO-Link Specification](../../spec/IOL-Interface-Spec_10002_V114_Jun24.pdf#page=41)
 
-// #[cfg(feature = "log")]
-// use log::info;
-// #[cfg(feature = "defmt")]
-// use defmt::info;
+#[cfg(feature = "log")]
+use log::info;
+#[cfg(feature = "defmt")]
+use defmt::info;
 
 #[cfg(test)]
 use mockall::automock;
@@ -21,6 +21,15 @@ pub use pl_services::pl_transfer::Fail as TransferError;
 use pl_services::inside_dl::*;
 
 use dynamic_characteristic_of_the_transmission as com_properties;
+
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+enum State {
+    Common,
+    AwaitTransferAnswer {
+        answer_length: usize,
+    },
+}
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum WakeUpPulseDirection {
@@ -43,16 +52,21 @@ pub trait Actions {
     async fn set_baudrate(&self, baudrate: u32);
 
     #[allow(async_fn_in_trait)]
-    async fn exchange_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError>;
+    async fn send_data(&self, data: &[u8]) -> Result<(), TransferError>;
+
+    #[allow(async_fn_in_trait)]
+    async fn try_receive_data(&self, data: &mut Option<&mut [u8]>) -> Result<(), TransferError>;
 }
 
 pub struct PL<A: Actions> {
+    state: State,
     actions: A,
 }
 
 impl<A: Actions> PL<A> {
     pub fn new(actions: A) -> Self {
         Self {
+            state: State::Common,
             actions,
         }
     }
@@ -60,51 +74,73 @@ impl<A: Actions> PL<A> {
     pub async fn run(&mut self) {
         loop {
             // For testability the loop body is in its own funtion.
-            self.handle_service().await;
+            self.next().await;
         }
     }
 
-    async fn handle_service(&mut self) {
-        match receive_service().await {
-            Service::PL_SetMode(target_mode) => {
-                match target_mode {
-                    pl_set_mode::TargetMode::INACTIVE => { /* TODO: implement */ },
-                    pl_set_mode::TargetMode::DI => { /* TODO: implement */ },
-                    pl_set_mode::TargetMode::DO => { /* TODO: implement */ },
-                    pl_set_mode::TargetMode::COM1 => self.actions.set_baudrate(com_properties::com1::F_DTR).await,
-                    pl_set_mode::TargetMode::COM2 => self.actions.set_baudrate(com_properties::com2::F_DTR).await,
-                    pl_set_mode::TargetMode::COM3 => self.actions.set_baudrate(com_properties::com3::F_DTR).await,
+    async fn next(&mut self) {
+        info!("{:?}", self.state);
+        match self.state {
+            State::Common => {
+                match receive_service().await {
+                    Service::PL_SetMode(target_mode) => {
+                        match target_mode {
+                            pl_set_mode::TargetMode::INACTIVE => { /* TODO: implement */ },
+                            pl_set_mode::TargetMode::DI => { /* TODO: implement */ },
+                            pl_set_mode::TargetMode::DO => { /* TODO: implement */ },
+                            pl_set_mode::TargetMode::COM1 => self.actions.set_baudrate(com_properties::com1::F_DTR).await,
+                            pl_set_mode::TargetMode::COM2 => self.actions.set_baudrate(com_properties::com2::F_DTR).await,
+                            pl_set_mode::TargetMode::COM3 => self.actions.set_baudrate(com_properties::com3::F_DTR).await,
+                        }
+                    }
+                    Service::PL_WakeUp => {
+                        #[allow(non_upper_case_globals)]
+                        const T_WU: Duration = Duration::from_micros(20);
+                        #[allow(non_upper_case_globals)]
+                        const T_REN: Duration = Duration::from_micros(500);
+
+                        let wake_up_pulse_direction = match self.actions.get_cq().await {
+                            PinState::Low => WakeUpPulseDirection::Up,
+                            PinState::High => WakeUpPulseDirection::Down,
+                        };
+
+                        self.actions.wake_up_pulse(wake_up_pulse_direction).await;
+
+                        self.actions.wait(T_REN - T_WU).await;
+
+                        send_service_result(ServiceResult::PL_WakeUp).await;
+                    }
+                    Service::PL_Transfer { data, data_length, answer_length } => {
+                        if let Err(e) = self.actions.send_data(&data[0..data_length]).await {
+                            send_service_result(ServiceResult::PL_Transfer(Err(e))).await;
+                        }
+                        else {
+                            self.state = State::AwaitTransferAnswer { answer_length }
+                        }
+                    }
                 }
             }
-            Service::PL_WakeUp => self.wake_up().await,
-            Service::PL_Transfer { data, data_length, answer_length } => { self.transfer(&data[0..data_length], answer_length).await; }
-        }
-    }
-
-    async fn wake_up(&mut self) {
-        #[allow(non_upper_case_globals)]
-        const T_WU: Duration = Duration::from_micros(20);
-        #[allow(non_upper_case_globals)]
-        const T_REN: Duration = Duration::from_micros(500);
-
-        let wake_up_pulse_direction = match self.actions.get_cq().await {
-            PinState::Low => WakeUpPulseDirection::Up,
-            PinState::High => WakeUpPulseDirection::Down,
-        };
-
-        self.actions.wake_up_pulse(wake_up_pulse_direction).await;
-
-        self.actions.wait(T_REN - T_WU).await;
-
-        send_service_result(ServiceResult::PL_WakeUp).await;
-    }
-
-    async fn transfer(&mut self, data: &[u8], answer_length: usize) {
-        let mut answer = [0u8; 32];
-        let result = self.actions.exchange_data(data, &mut answer[0..answer_length]).await;
-        match result {
-            Ok(()) => send_service_result(ServiceResult::PL_Transfer(Ok(answer))).await,
-            Err(e) => send_service_result(ServiceResult::PL_Transfer(Err(e))).await,
+            State::AwaitTransferAnswer { answer_length } => {
+                let mut buf = [0u8; 32];
+                let mut answer = Some(&mut buf[0..answer_length]);
+                let result = self.actions.try_receive_data(&mut answer).await;
+                match result {
+                    Ok(()) => {
+                        if answer.is_some() {
+                            send_service_result(ServiceResult::PL_Transfer(Ok(buf))).await;
+                            self.state = State::Common;
+                        }
+                    }
+                    Err(e) => {
+                        send_service_result(ServiceResult::PL_Transfer(Err(e))).await;
+                    }
+                }
+                // TODO: braucht es hier no irgendwo ein yield oder so?
+                if service_pending() {
+                    self.state = State::Common;
+                }
+                self.actions.wait(Duration::from_millis(1000)).await;
+            }
         }
     }
 }

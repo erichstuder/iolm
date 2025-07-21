@@ -6,6 +6,7 @@ use embassy_stm32::peripherals;
 use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::Peripheral;
 use embassy_stm32::mode::Async;
+use embassy_time::{Duration, with_timeout};
 
 use l6360::{L6360, Led};
 pub use l6360::PinState;
@@ -169,28 +170,40 @@ impl<'a> IOL_Transceiver<'a> {
         }
     }
 
-    pub async fn exchange(&mut self, data: &[u8], answer: &mut [u8]) -> Result<(), iol::master::TransferError>{
+    pub fn send(&mut self, data: &[u8]) -> Result<(), iol::master::TransferError>{
         self.en_cq(l6360::PinState::High);
         self.uart.as_mut().unwrap().blocking_write(data).map_err(Self::convert_uart_error)?;
         self.uart.as_mut().unwrap().blocking_flush().map_err(Self::convert_uart_error)?;
-
-        self.en_cq(l6360::PinState::Low);
-        self.uart.as_mut().unwrap().read(answer).await.map_err(Self::convert_uart_error)?;
-
-        // let result = with_timeout(
-        //     self.max_device_response_time,
-        //     self.uart.as_mut().unwrap().read(answer)
-        // ).await;
-
-        // match result {
-        //     Ok(read_result) => read_result.unwrap(),
-        //     Err(TimeoutError) => return Err(l6360::ReadTimeout),
-        // }
-
-        for byte in answer{
-            info!("answer: {:#04x}", byte);
-        }
-
+        self.en_cq(l6360::PinState::Low); // TODO: this should not be necessary
         Ok(())
+    }
+
+    pub async fn try_receive(&mut self, answer: &mut Option<&mut [u8]>) -> Result<(), iol::master::TransferError>{
+        self.en_cq(l6360::PinState::Low);
+        if let Some(buffer) = answer {
+            match embassy_time::with_timeout(
+                Duration::from_millis(1),
+                self.uart.as_mut().unwrap().read(buffer)
+            ).await {
+                Ok(Ok(())) => {
+                    info!("ok");
+                    for byte in buffer.iter(){
+                        info!("answer: {:#04x}", byte);
+                    }
+                    Ok(())
+                }
+                Ok(Err(e)) => {
+                    info!("uart error: {:?}", e);
+                    Err(Self::convert_uart_error(e))
+                }
+                Err(_) => {
+                    info!("No answer for now");
+                    *answer = None;
+                    Ok(())
+                }
+            }
+        } else {
+            panic!("must be Some");
+        }
     }
 }
