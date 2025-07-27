@@ -98,7 +98,19 @@ fn heartbeat_led(spawner: Spawner, pin: peripherals::PA5) {
 }
 
 async fn setup_hardware(spawner: Spawner) {
+    // let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(Default::default());
+    // //use embassy_stm32::rcc;
+    // let d = rcc::frequency::<peripherals::USART1>();
+
+    // use embassy_stm32::rcc;
+    // let _ = rcc::frequency::<peripherals::RCC>();
+
+    // let clocks = embassy_stm32::rcc::cl();
+    //info!("SYSCLK: {:?}", config.rcc.sys);
+    // info!("HCLK: {:?}", p.rcc.clocks.hclk);
+    // info!("PCLK1: {:?}", p.rcc.clocks.pclk1);
+    // info!("PCLK2: {:?}", p.rcc.clocks.pclk2);
 
     heartbeat_led(spawner, p.PA5);
 
@@ -137,4 +149,10 @@ async fn setup_hardware(spawner: Spawner) {
 
     // *IOL_TRANSCEIVER.lock().await = Some(L6360::new(i2c, 0b1100_000, config).unwrap());
     *IOL_TRANSCEIVER.lock().await = Some(iol_transceiver);
+
+    // Note: This is necessary to make sure interrupts are enabled as I use my own IRQ-Handler for USART1.
+    #[allow(unsafe_code)]
+    unsafe {
+        cortex_m::interrupt::enable();
+    }
 }

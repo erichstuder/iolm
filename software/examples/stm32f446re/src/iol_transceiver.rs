@@ -8,6 +8,11 @@ use embassy_stm32::Peripheral;
 use embassy_stm32::mode::Async;
 use embassy_time::{Duration, with_timeout};
 
+use embassy_stm32::interrupt::InterruptExt;
+use embassy_stm32::interrupt;
+use embassy_stm32::pac;
+use embassy_stm32::rcc;
+
 use l6360::{L6360, Led};
 pub use l6360::PinState;
 
@@ -16,9 +21,9 @@ pub use l6360::PinState;
 //     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
 // });
 
-bind_interrupts!(struct UartIrqs {
-    USART1 => usart::InterruptHandler<peripherals::USART1>;
-});
+// bind_interrupts!(struct UartIrqs {
+//     USART1 => usart::InterruptHandler<peripherals::USART1>;
+// });
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Mode {
@@ -46,7 +51,7 @@ pub struct IOL_Transceiver<'a> {
 impl<'a> IOL_Transceiver<'a> {
     pub async fn new(
         i2c: I2c<'a, Async>,
-        uart_instance: peripherals::USART1,
+        uart_instance: peripherals::USART1, //idea: take it, so no one else can
         tx_dma: peripherals::DMA2_CH7,
         rx_dma: peripherals::DMA2_CH2,
         tx_pin: peripherals::PA9,
@@ -108,17 +113,60 @@ impl<'a> IOL_Transceiver<'a> {
         config.assume_noise_free = false;
         config.rx_pull = Pull::None;
 
-        self.uart = Some(Uart::new(
-            self.uart_instance.take().unwrap(),
-            self.rx_pin.take().unwrap(),
-            self.tx_pin.take().unwrap(),
-            UartIrqs,
-            self.tx_dma.take().unwrap(),
-            self.rx_dma.take().unwrap(),
-            config,
-        ).unwrap());
+        // self.uart = Some(Uart::new(
+        //     self.uart_instance.take().unwrap(),
+        //     self.rx_pin.take().unwrap(),
+        //     self.tx_pin.take().unwrap(),
+        //     UartIrqs,
+        //     self.tx_dma.take().unwrap(),
+        //     self.rx_dma.take().unwrap(),
+        //     config,
+        // ).unwrap());
 
         self.mode = Mode::Uart;
+
+
+        let rcc = pac::RCC;
+
+
+        rcc.apb2enr().modify(|w| w.set_usart1en(true));
+        let gpioa = pac::GPIOA;
+        rcc.ahb1enr().modify(|w| w.set_gpioaen(true));
+
+        gpioa.moder().modify(|w| {
+            w.set_moder(9, embassy_stm32::pac::gpio::vals::Moder::ALTERNATE);  // PA9 = Alternate function
+            w.set_moder(10, embassy_stm32::pac::gpio::vals::Moder::ALTERNATE); // PA10 = Alternate function
+        });
+
+        gpioa.afr(1).modify(|w| {
+            w.set_afr(9-8, 7);   // PA9 = AF7
+            w.set_afr(10-8, 7);  // PA10 = AF7
+        });
+
+
+
+        let uart = pac::USART1;
+
+        uart.cr1().modify(|w| {
+            w.set_m0(embassy_stm32::pac::usart::vals::M0::BIT9);     // including parity bit
+            w.set_pce(true);     // Parity control enable
+            w.set_ps(embassy_stm32::pac::usart::vals::Ps::EVEN);     // Even parity
+            w.set_te(true);      // Transmitter enable - THIS IS CRUCIAL!
+            w.set_re(true);      // Receiver enable
+            w.set_rxneie(true);  // RX interrupt enable
+        });
+
+        uart.cr2().modify(|w| {
+            w.set_stop(embassy_stm32::pac::usart::vals::Stop::STOP1);    // 1 stop bit
+        });
+
+        uart.cr3().modify(|w| w.set_eie(true));
+        uart.cr1().modify(|w| w.set_ue(true));
+
+        // Enable USART1 interrupt in NVIC
+        interrupt::USART1.set_priority(interrupt::Priority::P6); // TODO: what priority is necessary?
+        #[allow(unsafe_code)]
+        unsafe { interrupt::USART1.enable(); }
     }
 
     pub fn get_mode(&self) -> Mode {
@@ -155,7 +203,13 @@ impl<'a> IOL_Transceiver<'a> {
     }
 
     pub fn set_baudrate(&mut self, baudrate: u32) {
-        self.uart.as_ref().unwrap().set_baudrate(baudrate).unwrap();
+        //self.uart.as_ref().unwrap().set_baudrate(baudrate).unwrap();
+        let uart_freq = rcc::frequency::<peripherals::USART1>();
+
+        let brr_value = (uart_freq.0 + baudrate / 2) / baudrate;
+
+        let uart = pac::USART1;
+        uart.brr().write(|w| w.set_brr(brr_value as u16));
     }
 
 
@@ -172,9 +226,18 @@ impl<'a> IOL_Transceiver<'a> {
 
     pub fn send(&mut self, data: &[u8]) -> Result<(), iol::master::TransferError>{
         self.en_cq(l6360::PinState::High);
-        self.uart.as_mut().unwrap().blocking_write(data).map_err(Self::convert_uart_error)?;
-        self.uart.as_mut().unwrap().blocking_flush().map_err(Self::convert_uart_error)?;
+        let uart = pac::USART1;
+        for &byte in data {
+            while !uart.sr().read().txe() {}
+            uart.dr().write(|w| w.set_dr(byte as u16));
+        }
+        // Wait for transmission complete
+        while !uart.sr().read().tc() {}
+        //self.uart.as_mut().unwrap().blocking_write(data).map_err(Self::convert_uart_error)?;
+        //self.uart.as_mut().unwrap().blocking_flush().map_err(Self::convert_uart_error)?;
         self.en_cq(l6360::PinState::Low); // TODO: this should not be necessary
+
+        info!("sentttttttttttttt");
         Ok(())
     }
 
@@ -205,5 +268,57 @@ impl<'a> IOL_Transceiver<'a> {
         } else {
             panic!("must be Some");
         }
+    }
+
+}
+
+#[interrupt]
+fn USART1() {
+    let uart = pac::USART1;
+    let sr = uart.sr().read();
+
+    // Check for received data
+    if sr.rxne() {
+        // Read the received byte
+        let received_byte = uart.dr().read().dr() as u8;
+
+        // unsafe {
+        //     if RX_COUNT < RX_BUFFER.len() {
+        //         RX_BUFFER[RX_COUNT] = received_byte;
+        //         RX_COUNT += 1;
+        //     }
+        // }
+
+        // Signal that data is available
+        // RX_DATA_READY.store(true, Ordering::Release);
+        // RX_SIGNAL.signal(received_byte);
+
+        //info!("USART1 RX----------------: {:#04x}", received_byte);
+    }
+
+    // Check for transmission complete
+    if sr.tc() {
+        info!("USART1 TX complete");
+        // Clear TC flag by reading SR then writing DR (already done above)
+    }
+
+    // Check for overrun error
+    if sr.ore() {
+        info!("USART1 Overrun error!");
+        // Clear ORE by reading SR then reading DR
+        let _dummy = uart.dr().read();
+    }
+
+    // Check for framing error
+    if sr.fe() {
+        info!("USART1 Framing error!");
+        // Clear FE by reading SR then reading DR
+        let _dummy = uart.dr().read();
+    }
+
+    // Check for parity error
+    if sr.pe() {
+        info!("USART1 Parity error!");
+        // Clear PE by reading SR
     }
 }

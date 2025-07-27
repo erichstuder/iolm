@@ -121,25 +121,25 @@ impl<A: Actions> PL<A> {
                 }
             }
             State::AwaitTransferAnswer { answer_length } => {
-                let mut buf = [0u8; 32];
-                let mut answer = Some(&mut buf[0..answer_length]);
-                let result = self.actions.try_receive_data(&mut answer).await;
-                match result {
-                    Ok(()) => {
-                        if answer.is_some() {
-                            send_service_result(ServiceResult::PL_Transfer(Ok(buf))).await;
-                            self.state = State::Common;
-                        }
-                    }
-                    Err(e) => {
-                        send_service_result(ServiceResult::PL_Transfer(Err(e))).await;
-                    }
-                }
-                // TODO: braucht es hier no irgendwo ein yield oder so?
-                if service_pending() {
-                    self.state = State::Common;
-                }
-                self.actions.wait(Duration::from_millis(1000)).await;
+                // let mut buf = [0u8; 32];
+                // let mut answer = Some(&mut buf[0..answer_length]);
+                // let result = self.actions.try_receive_data(&mut answer).await;
+                // match result {
+                //     Ok(()) => {
+                //         if answer.is_some() {
+                //             send_service_result(ServiceResult::PL_Transfer(Ok(buf))).await;
+                //             self.state = State::Common;
+                //         }
+                //     }
+                //     Err(e) => {
+                //         send_service_result(ServiceResult::PL_Transfer(Err(e))).await;
+                //     }
+                // }
+                // // TODO: braucht es hier no irgendwo ein yield oder so?
+                // if service_pending() {
+                //     self.state = State::Common;
+                // }
+                self.actions.wait(Duration::from_millis(10000)).await;
             }
         }
     }
