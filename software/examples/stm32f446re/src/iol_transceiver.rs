@@ -6,13 +6,13 @@ use embassy_stm32::peripherals;
 use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::Peripheral;
 use embassy_stm32::mode::Async;
-use embassy_time::{Duration, with_timeout};
+use embassy_time::{Duration, Instant, with_timeout};
 
 use embassy_stm32::interrupt::InterruptExt;
 use embassy_stm32::interrupt;
 use embassy_stm32::pac;
 use embassy_stm32::rcc;
-use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 use embassy_sync::signal::Signal;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
@@ -30,19 +30,14 @@ pub use l6360::PinState;
 
 static mut TX_BUF: [u8; 32] = [0; 32];
 static mut RX_BUF: [u8; 32] = [0; 32];
-
-// static TX_LEN: AtomicUsize = AtomicUsize::new(0);
-static mut TX_LEN: usize = 0;
-
+static TX_LEN: AtomicUsize = AtomicUsize::new(0);
 static RX_LEN: AtomicUsize = AtomicUsize::new(0);
-
-// static TX_BUF_INDEX: AtomicUsize = AtomicUsize::new(0);
-static mut TX_BUF_INDEX: usize = 0;
-
+static TX_BUF_INDEX: AtomicUsize = AtomicUsize::new(0);
 static RX_BUF_INDEX: AtomicUsize = AtomicUsize::new(0);
 static RX_DONE_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 static mut DURATION_SEND_AND_RECEIVE: Duration = Duration::from_micros(0);
 static mut EN_CQ: Option<Output<'static>> = None;
+static mut FINAL_TIME: Instant = Instant::from_secs(0);
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Mode {
@@ -182,7 +177,7 @@ impl<'a> IOL_Transceiver<'a> {
             w.set_ps(embassy_stm32::pac::usart::vals::Ps::EVEN);
             w.set_te(true);
             w.set_re(true);
-            w.set_rxneie(true);
+            //w.set_rxneie(true);
             //w.set_tcie(true);
         });
 
@@ -293,12 +288,10 @@ impl<'a> IOL_Transceiver<'a> {
         #[allow(unsafe_code)]
         unsafe {
             TX_BUF[..data.len()].copy_from_slice(data);
-            TX_BUF_INDEX = 0;
-            TX_LEN = data.len();
         }
 
-        // TX_BUF_INDEX.store(0, Ordering::Relaxed);
-        // TX_LEN.store(data.len(), Ordering::Release);
+        TX_BUF_INDEX.store(0, Ordering::Relaxed);
+        TX_LEN.store(data.len(), Ordering::Release);
 
         let uart = pac::USART1;
         if !uart.sr().read().txe() {
@@ -306,6 +299,7 @@ impl<'a> IOL_Transceiver<'a> {
         }
         self.en_cq(l6360::PinState::High);
         uart.dr().write(|w| w.set_dr(data[0] as u16));
+        let start_time = embassy_time::Instant::now();
 
         uart.cr1().modify(|w| {
             w.set_txeie(true);
@@ -313,7 +307,18 @@ impl<'a> IOL_Transceiver<'a> {
 
         RX_BUF_INDEX.store(0, Ordering::Relaxed);
         RX_LEN.store(answer.len(), Ordering::Release);
+        // loop {
+        //     if RX_DONE_SIGNAL.signaled() {
+        //         info!("siggggggggggggggggggggg");
+        //         break;
+        //     }
+        //     embassy_time::Timer::after(Duration::from_millis(1000)).await;
+        //     info!("check if signaled");
+        // }
+
+        // info!("wait on signal");
         RX_DONE_SIGNAL.wait().await;
+        info!("signal receiveeeeeeeeeeeeeeeeeeed");
 
         #[allow(unsafe_code)]
         unsafe {
@@ -328,6 +333,11 @@ impl<'a> IOL_Transceiver<'a> {
             info!("answer[{}]: {:#04x}", i, byte);
         }
 
+        #[allow(unsafe_code)]
+        let end_time = unsafe { FINAL_TIME };
+        let duration = end_time.duration_since(start_time);
+        info!("Send and receive took: {} microseconds", duration.as_micros());
+
 
         // let uart = pac::USART1;
         // for &byte in data {
@@ -339,7 +349,6 @@ impl<'a> IOL_Transceiver<'a> {
         //self.uart.as_mut().unwrap().blocking_write(data).map_err(Self::convert_uart_error)?;
         //self.uart.as_mut().unwrap().blocking_flush().map_err(Self::convert_uart_error)?;
 
-        info!("send started");
         Ok(())
     }
 
@@ -397,13 +406,24 @@ impl<'a> IOL_Transceiver<'a> {
 
 #[interrupt]
 fn USART1() {
+    // Note: This is the potential end time. It is measured here to be as accurate as reasonable possible.
+    #[allow(unsafe_code)]
+    unsafe {
+        FINAL_TIME = embassy_time::Instant::now();
+    }
+
     let uart = pac::USART1;
     let sr = uart.sr().read();
 
+    //info!("sr: {:#010x}", sr.0);
+
     if sr.tc() {
+        // info!("tc");
+
         uart.cr1().modify(|w| {
             w.set_tcie(false);
-            w.set_txeie(false);
+            // w.set_re(true);
+            w.set_rxneie(true);
         });
 
         // TODO: Is there another solution than using unsafe?
@@ -411,20 +431,15 @@ fn USART1() {
         unsafe {
             EN_CQ.as_mut().unwrap().set_level(Level::Low)
         }
+        uart.sr().modify(|w| w.set_tc(false));
+        // let _ = uart.dr().read().dr();
     }
     // Check for transmission complete
     if sr.txe() {
-        //info!("tc completeeeeeeeeeeeeeeeeeeeee");
-        // let mut tx_buf_index = TX_BUF_INDEX.load(Ordering::Relaxed);
-        // let tx_len = TX_LEN.load(Ordering::Relaxed);
+        // info!("txe");
+        let mut tx_buf_index = TX_BUF_INDEX.load(Ordering::Relaxed);
+        let tx_len = TX_LEN.load(Ordering::Relaxed);
 
-        let mut tx_buf_index;
-        let tx_len;
-        #[allow(unsafe_code)]
-        unsafe {
-            tx_buf_index = TX_BUF_INDEX;
-            tx_len = TX_LEN;
-        }
 
         // if tx_len == 0 {
         //     return; //debugggggggggggg
@@ -432,10 +447,6 @@ fn USART1() {
 
         if tx_buf_index < tx_len-1 {
             tx_buf_index += 1;
-
-            // if !uart.sr().read().txe() {
-            //     panic!("The transmit data register should always be empty here!");
-            // }
 
             //#[allow(unsafe_code)]
             //let dummy = unsafe{TX_BUF[tx_buf_index]};
@@ -447,43 +458,55 @@ fn USART1() {
                 uart.dr().write(|w| w.set_dr(TX_BUF[tx_buf_index] as u16));
             }
 
-            // TX_BUF_INDEX.store(tx_buf_index, Ordering::Relaxed);
-            #[allow(unsafe_code)]
-            unsafe {
-                TX_BUF_INDEX = tx_buf_index;
-            }
+            TX_BUF_INDEX.store(tx_buf_index, Ordering::Relaxed);
+        }
+        else {
+            uart.cr1().modify(|w| {
+                w.set_txeie(false);
+                w.set_tcie(true);
+            });
+            uart.sr().modify(|w| w.set_txe(false));
         }
     }
 
     // Check for received data
     if sr.rxne() {
-        // let mut rx_buf_index = RX_BUF_INDEX.load(Ordering::Relaxed);
-        // let rx_len = RX_LEN.load(Ordering::Relaxed);
+        //info!("rxne");
+        let mut rx_buf_index = RX_BUF_INDEX.load(Ordering::Relaxed);
+        let rx_len = RX_LEN.load(Ordering::Relaxed);
 
         // if rx_len == 0 {
         //     return; //debugggggggggggg
         // }
 
-        // if rx_buf_index < rx_len-1 {
-        //     rx_buf_index += 1;
+        let dr = uart.dr().read().dr() as u8;
 
-        //     // TODO: is there a better solution than using unsafe?
-        //     #[allow(unsafe_code)]
-        //     unsafe {
-        //         RX_BUF[rx_buf_index] = uart.dr().read().dr() as u8;
-        //     }
+        if rx_buf_index < rx_len {
+            // TODO: is there a better solution than using unsafe?
+            #[allow(unsafe_code)]
+            unsafe {
+                RX_BUF[rx_buf_index] = dr;
+            }
+        }
 
-        //     RX_BUF_INDEX.store(rx_buf_index, Ordering::Release);
-        // }
-        // else {
-        //     #[allow(unsafe_code)]
-        //     unsafe {
-        //         EN_CQ.as_mut().unwrap().set_level(Level::High)
-        //     }
-        //     RX_DONE_SIGNAL.signal(());
-        // }
+        if rx_buf_index < rx_len-1 {
+            RX_BUF_INDEX.store(rx_buf_index+1, Ordering::Release);
+        }
 
+        if rx_buf_index >= rx_len-1 {
+            #[allow(unsafe_code)]
+            unsafe {
+                // FINAL_TIME = embassy_time::Instant::now();
+                EN_CQ.as_mut().unwrap().set_level(Level::High);
+            }
 
+            uart.cr1().modify(|w| {
+                // w.set_re(false);
+                w.set_rxneie(false);
+            });
+            RX_DONE_SIGNAL.signal(());
+            info!("dummy");
+        }
 
 
         // unsafe {
@@ -517,6 +540,6 @@ fn USART1() {
     // Check for parity error
     if sr.pe() {
         info!("USART1 Parity error!");
-        // Clear PE by reading SR
+        let _ = uart.dr().read();
     }
 }
