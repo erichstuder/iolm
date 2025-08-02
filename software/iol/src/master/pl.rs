@@ -52,10 +52,10 @@ pub trait Actions {
     async fn set_baudrate(&self, baudrate: u32);
 
     #[allow(async_fn_in_trait)]
-    async fn send_data(&self, data: &[u8]) -> Result<(), TransferError>;
+    async fn send_and_receive_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError>;
 
-    #[allow(async_fn_in_trait)]
-    async fn try_receive_data(&self, data: &mut Option<&mut [u8]>) -> Result<(), TransferError>;
+    // #[allow(async_fn_in_trait)]
+    // async fn try_receive_data(&self, data: &mut Option<&mut [u8]>) -> Result<(), TransferError>;
 }
 
 pub struct PL<A: Actions> {
@@ -111,7 +111,8 @@ impl<A: Actions> PL<A> {
                         send_service_result(ServiceResult::PL_WakeUp).await;
                     }
                     Service::PL_Transfer { data, data_length, answer_length } => {
-                        if let Err(e) = self.actions.send_data(&data[0..data_length]).await {
+                        let mut answer = [0u8; 2]; // debug
+                        if let Err(e) = self.actions.send_and_receive_data(&data[0..data_length], &mut answer).await {
                             send_service_result(ServiceResult::PL_Transfer(Err(e))).await;
                         }
                         else {

@@ -58,13 +58,13 @@ impl master::Actions for MasterActions {
         info!("baudrate set to {:?}", baudrate);
     }
 
-    async fn send_data(&self, _data: &[u8]) -> Result<(), master::TransferError> {
+    async fn send_and_receive_data(&self, _data: &[u8], _answer: &mut [u8]) -> Result<(), master::TransferError> {
         Ok(())
     }
 
-    async fn try_receive_data(&self, _answer: &mut Option<&mut [u8]>) -> Result<(), master::TransferError> {
-        Ok(())
-    }
+    // async fn try_receive_data(&self, _answer: &mut Option<&mut [u8]>) -> Result<(), master::TransferError> {
+    //     Ok(())
+    // }
 }
 
 async fn use_master() {

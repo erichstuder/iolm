@@ -54,10 +54,10 @@ pub trait Actions {
     async fn set_baudrate(&self, baudrate: u32);
 
     #[allow(async_fn_in_trait)]
-    async fn send_data(&self, data: &[u8]) -> Result<(), TransferError>;
+    async fn send_and_receive_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError>;
 
-    #[allow(async_fn_in_trait)]
-    async fn try_receive_data(&self, answer: &mut Option<&mut [u8]>) -> Result<(), TransferError>;
+    // #[allow(async_fn_in_trait)]
+    // async fn try_receive_data(&self, answer: &mut Option<&mut [u8]>) -> Result<(), TransferError>;
 }
 
 pub struct PlActions<A: Actions> {
@@ -81,13 +81,13 @@ impl<A: Actions> pl::Actions for PlActions<A> {
         self.actions.set_baudrate(baudrate).await;
     }
 
-    async fn send_data(&self, data: &[u8]) -> Result<(), TransferError> {
-        self.actions.send_data(data).await
+    async fn send_and_receive_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError> {
+        self.actions.send_and_receive_data(data, answer).await
     }
 
-    async fn try_receive_data(&self, answer: &mut Option<&mut [u8]>) -> Result<(), TransferError> {
-        self.actions.try_receive_data(answer).await
-    }
+    // async fn try_receive_data(&self, answer: &mut Option<&mut [u8]>) -> Result<(), TransferError> {
+    //     self.actions.try_receive_data(answer).await
+    // }
 }
 
 pub struct PortPowerSwitchingActions<A: Actions> {

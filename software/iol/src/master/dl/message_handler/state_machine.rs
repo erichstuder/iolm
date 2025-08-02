@@ -121,7 +121,7 @@ impl<A: Actions> StateMachine<A> {
                             }
                         ).await;
                         info!("wait on answer of test message");
-                        self.actions.wait(Duration::from_millis(10)).await; //TODO: set right time and currently waiting the whole m-sequence time because it takes that long anyway.
+                        self.actions.wait(Duration::from_millis(100)).await; //TODO: set right time and currently waiting the whole m-sequence time because it takes that long anyway.
                         match pl::services::service_result_is_ready() {
                             true => {
                                 let _answer = pl::services::receive_service_result().await;
