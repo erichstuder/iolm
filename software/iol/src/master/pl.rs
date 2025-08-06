@@ -52,10 +52,7 @@ pub trait Actions {
     async fn set_baudrate(&self, baudrate: u32);
 
     #[allow(async_fn_in_trait)]
-    async fn send_and_receive_data(&self, data: &[u8], answer: &mut [u8]) -> Result<(), TransferError>;
-
-    // #[allow(async_fn_in_trait)]
-    // async fn try_receive_data(&self, data: &mut Option<&mut [u8]>) -> Result<(), TransferError>;
+    async fn send_and_receive_data(&self, data: &[u8], answer: &mut [u8]) -> Result<Duration, TransferError>;
 }
 
 pub struct PL<A: Actions> {

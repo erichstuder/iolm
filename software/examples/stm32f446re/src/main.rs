@@ -136,7 +136,7 @@ async fn setup_hardware(spawner: Spawner) {
         },
     );
 
-    let iol_transceiver = IOL_Transceiver::new(i2c, p.USART1, p.DMA2_CH7, p.DMA2_CH2, p.PA9, p.PA10, p.PA6, p.PC0).await;
+    let iol_transceiver = IOL_Transceiver::new(i2c, p.USART1, p.PA9, p.PA10, p.PA6, p.PC0).await;
 
     // let config = l6360::Config {
     //     configuration_register: l6360::ConfigurationRegister {

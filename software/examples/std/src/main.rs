@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
 use tokio::time::{sleep, Duration, timeout};
+use core;
 use std::future::Future;
 use log::info;
 
@@ -58,13 +59,9 @@ impl master::Actions for MasterActions {
         info!("baudrate set to {:?}", baudrate);
     }
 
-    async fn send_and_receive_data(&self, _data: &[u8], _answer: &mut [u8]) -> Result<(), master::TransferError> {
-        Ok(())
+    async fn send_and_receive_data(&self, _data: &[u8], _answer: &mut [u8]) -> Result<(core::time::Duration), master::TransferError> {
+        Ok(core::time::Duration::from_millis(42))
     }
-
-    // async fn try_receive_data(&self, _answer: &mut Option<&mut [u8]>) -> Result<(), master::TransferError> {
-    //     Ok(())
-    // }
 }
 
 async fn use_master() {

@@ -1,32 +1,20 @@
 use defmt::info;
-use embassy_stm32::bind_interrupts;
 use embassy_stm32::i2c::I2c;
-use embassy_stm32::usart::{self, Uart};
+use embassy_stm32::usart;
 use embassy_stm32::peripherals;
 use embassy_stm32::gpio::{Output, Input, Level, Speed, Pull};
 use embassy_stm32::Peripheral;
 use embassy_stm32::mode::Async;
-use embassy_time::{Duration, Instant, with_timeout};
-
+use embassy_stm32::{pac, rcc, interrupt};
 use embassy_stm32::interrupt::InterruptExt;
-use embassy_stm32::interrupt;
-use embassy_stm32::pac;
-use embassy_stm32::rcc;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use embassy_time::Instant;
 use embassy_sync::signal::Signal;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use core::time::Duration;
 
 use l6360::{L6360, Led};
 pub use l6360::PinState;
-
-// bind_interrupts!(struct I2cIrqs {
-//     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
-//     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
-// });
-
-// bind_interrupts!(struct UartIrqs {
-//     USART1 => usart::InterruptHandler<peripherals::USART1>;
-// });
 
 static mut TX_BUF: [u8; 32] = [0; 32];
 static mut RX_BUF: [u8; 32] = [0; 32];
@@ -35,7 +23,6 @@ static RX_LEN: AtomicUsize = AtomicUsize::new(0);
 static TX_BUF_INDEX: AtomicUsize = AtomicUsize::new(0);
 static RX_BUF_INDEX: AtomicUsize = AtomicUsize::new(0);
 static RX_DONE_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-static mut DURATION_SEND_AND_RECEIVE: Duration = Duration::from_micros(0);
 static mut EN_CQ: Option<Output<'static>> = None;
 static mut FINAL_TIME: Instant = Instant::from_secs(0);
 
@@ -45,29 +32,27 @@ pub enum Mode {
     Uart,
 }
 
-// Note: bind_interrupts is not generic. This leads to having concrete types.
+// Note: Some HW components are taken here but unused and directly accessed. But they are taken so no one else can.
 #[allow(non_camel_case_types)]
 pub struct IOL_Transceiver<'a> {
     l6360: L6360<I2c<'a, Async>>,
+    #[allow(unused)]
     uart_instance: Option<peripherals::USART1>,
-    tx_dma: Option<peripherals::DMA2_CH7>,
-    rx_dma: Option<peripherals::DMA2_CH2>,
+    #[allow(unused)]
     tx_pin: Option<peripherals::PA9>,
+    #[allow(unused)]
     rx_pin: Option<peripherals::PA10>,
     enl_plus: Output<'a>,
     // en_cq: Output<'a>,
     in_cq: Option<Output<'a>>,
     out_cq: Option<Input<'a>>,
-    uart: Option<Uart<'a, Async>>,
     mode: Mode,
 }
 
 impl<'a> IOL_Transceiver<'a> {
     pub async fn new(
         i2c: I2c<'a, Async>,
-        uart_instance: peripherals::USART1, //idea: take it, so no one else can
-        tx_dma: peripherals::DMA2_CH7,
-        rx_dma: peripherals::DMA2_CH2,
+        uart_instance: peripherals::USART1,
         tx_pin: peripherals::PA9,
         rx_pin: peripherals::PA10,
         enl_plus: peripherals::PA6,
@@ -78,8 +63,6 @@ impl<'a> IOL_Transceiver<'a> {
         let tx_clone = unsafe { tx_pin.clone_unchecked() };
         #[allow(unsafe_code)]
         let rx_clone = unsafe { rx_pin.clone_unchecked() };
-
-        // let l6360_hw = IOL_Transceiver::new(p.USART1, p.DMA2_CH7, p.DMA2_CH2, p.PA9, p.PA10, p.PA6, p.PC0);
 
         let config = l6360::Config {
             configuration_register: l6360::ConfigurationRegister {
@@ -102,15 +85,12 @@ impl<'a> IOL_Transceiver<'a> {
         Self {
             l6360,
             uart_instance: Some(uart_instance),
-            tx_dma: Some(tx_dma),
-            rx_dma: Some(rx_dma),
             tx_pin: Some(tx_pin),
             rx_pin: Some(rx_pin),
             enl_plus: Output::new(enl_plus, Level::Low, Speed::Low),
             // en_cq: Output::new(en_cq, Level::Low, Speed::Low),
             in_cq: Some(Output::new(tx_clone, Level::Low, Speed::Low)),
             out_cq: Some(Input::new(rx_clone, Pull::None)),
-            uart: None,
             mode: Mode::Gpio,
         }
     }
@@ -177,8 +157,6 @@ impl<'a> IOL_Transceiver<'a> {
             w.set_ps(embassy_stm32::pac::usart::vals::Ps::EVEN);
             w.set_te(true);
             w.set_re(true);
-            //w.set_rxneie(true);
-            //w.set_tcie(true);
         });
 
         uart.cr2().modify(|w| {
@@ -231,7 +209,8 @@ impl<'a> IOL_Transceiver<'a> {
         }
     }
 
-    pub fn en_cq(&mut self, level: l6360::PinState) {// TODO: Is there a better solution than using unsafe?
+    pub fn en_cq(&mut self, level: l6360::PinState) {
+        // TODO: Is there a better solution than using unsafe?
         #[allow(unsafe_code)]
         match level {
         //     l6360::PinState::High => self.en_cq.set_level(Level::High),
@@ -274,15 +253,15 @@ impl<'a> IOL_Transceiver<'a> {
             usart::Error::Noise => panic!("noise error"), // No corresponding error. So just panic.
             usart::Error::Overrun => iol::master::TransferError::OVERRUN,
             usart::Error::Parity => iol::master::TransferError::PARITY_ERROR,
-            usart::Error::BufferTooLong => panic!("buffer too long error"), // Programming error. So just panic.
+            usart::Error::BufferTooLong => panic!("buffer too long error"), // Probably a programming error. So just panic.
             e => panic!("unhandled error: {:?}", e),
         }
     }
 
-    pub async fn send_and_receive(&mut self, data: &[u8], answer: &mut[u8]) -> Result<(), iol::master::TransferError>{
+    pub async fn send_and_receive(&mut self, data: &[u8], answer: &mut[u8]) -> Result<Duration, iol::master::TransferError>{
         if data.len() == 0 {
             panic!("Currently Length 0 is not allowed.");
-            // Note: If this shall be allowed special care might be taken.
+            // Note: If this shall be allowed, care might also be taken in other places (interrupt handling, ...).
         }
 
         #[allow(unsafe_code)]
@@ -307,18 +286,7 @@ impl<'a> IOL_Transceiver<'a> {
 
         RX_BUF_INDEX.store(0, Ordering::Relaxed);
         RX_LEN.store(answer.len(), Ordering::Release);
-        // loop {
-        //     if RX_DONE_SIGNAL.signaled() {
-        //         info!("siggggggggggggggggggggg");
-        //         break;
-        //     }
-        //     embassy_time::Timer::after(Duration::from_millis(1000)).await;
-        //     info!("check if signaled");
-        // }
-
-        // info!("wait on signal");
         RX_DONE_SIGNAL.wait().await;
-        info!("signal receiveeeeeeeeeeeeeeeeeeed");
 
         #[allow(unsafe_code)]
         unsafe {
@@ -327,83 +295,24 @@ impl<'a> IOL_Transceiver<'a> {
         }
 
         //DEBUG
-        let rx_len = RX_BUF_INDEX.load(Ordering::Relaxed) + 1;
-        info!("Received {} bytes:", rx_len);
-        for (i, &byte) in answer[..rx_len].iter().enumerate() {
-            info!("answer[{}]: {:#04x}", i, byte);
-        }
+        // let rx_len = RX_BUF_INDEX.load(Ordering::Relaxed) + 1;
+        // info!("Received {} bytes:", rx_len);
+        // for (i, &byte) in answer[..rx_len].iter().enumerate() {
+        //     info!("answer[{}]: {:#04x}", i, byte);
+        // }
+        //DEBUG
 
         #[allow(unsafe_code)]
         let end_time = unsafe { FINAL_TIME };
-        let duration = end_time.duration_since(start_time);
+        let duration = core::time::Duration::from_micros(end_time.duration_since(start_time).as_micros());
         info!("Send and receive took: {} microseconds", duration.as_micros());
 
-
-        // let uart = pac::USART1;
-        // for &byte in data {
-        //     while !uart.sr().read().txe() {}
-        //     uart.dr().write(|w| w.set_dr(byte as u16));
-        // }
-        // Wait for transmission complete
-        //while !uart.sr().read().tc() {}
-        //self.uart.as_mut().unwrap().blocking_write(data).map_err(Self::convert_uart_error)?;
-        //self.uart.as_mut().unwrap().blocking_flush().map_err(Self::convert_uart_error)?;
-
-        Ok(())
+        Ok(duration)
     }
-
-    // pub async fn try_receive(&mut self, answer: &mut Option<&mut [u8]>) -> Result<(), iol::master::TransferError>{
-    //     self.en_cq(l6360::PinState::Low);
-    //     if let Some(buffer) = answer {
-    //         match embassy_time::with_timeout(
-    //             Duration::from_millis(1),
-    //             self.uart.as_mut().unwrap().read(buffer)
-    //         ).await {
-    //             Ok(Ok(())) => {
-    //                 info!("ok");
-    //                 for byte in buffer.iter(){
-    //                     info!("answer: {:#04x}", byte);
-    //                 }
-    //                 Ok(())
-    //             }
-    //             Ok(Err(e)) => {
-    //                 info!("uart error: {:?}", e);
-    //                 Err(Self::convert_uart_error(e))
-    //             }
-    //             Err(_) => {
-    //                 info!("No answer for now");
-    //                 *answer = None;
-    //                 Ok(())
-    //             }
-    //         }
-    //     } else {
-    //         panic!("must be Some");
-    //     }
-    // }
-
 }
 
-// #[interrupt]
-// fn DMA2_STREAM7() {
-//     let dma2 = pac::DMA2;
 
-//     // Check if transfer complete
-//     if dma2.isr(1).read().tcif(7) {
-//         // Clear transfer complete flag
-//         dma2.ifcr(1).write(|w| w.set_tcif(7, true));
-//         // Signal completion
-//         // DMA_TX_COMPLETE.store(true, Ordering::Release);
-
-//         info!("DMA TX transfer complete");
-//     }
-
-//     // Check for errors
-//     if dma2.isr(1).read().teif(7) {
-//         dma2.ifcr(1).write(|w| w.set_teif(7, true));
-//         info!("DMA TX transfer error");
-//     }
-// }
-
+// Note: Sending and receiving could probably be improved by using the DMA. This could reduce the use of the CPU due to interrupts.
 #[interrupt]
 fn USART1() {
     // Note: This is the potential end time. It is measured here to be as accurate as reasonable possible.
@@ -415,14 +324,9 @@ fn USART1() {
     let uart = pac::USART1;
     let sr = uart.sr().read();
 
-    //info!("sr: {:#010x}", sr.0);
-
     if sr.tc() {
-        // info!("tc");
-
         uart.cr1().modify(|w| {
             w.set_tcie(false);
-            // w.set_re(true);
             w.set_rxneie(true);
         });
 
@@ -434,23 +338,13 @@ fn USART1() {
         uart.sr().modify(|w| w.set_tc(false));
         // let _ = uart.dr().read().dr();
     }
-    // Check for transmission complete
+
     if sr.txe() {
-        // info!("txe");
         let mut tx_buf_index = TX_BUF_INDEX.load(Ordering::Relaxed);
         let tx_len = TX_LEN.load(Ordering::Relaxed);
 
-
-        // if tx_len == 0 {
-        //     return; //debugggggggggggg
-        // }
-
         if tx_buf_index < tx_len-1 {
             tx_buf_index += 1;
-
-            //#[allow(unsafe_code)]
-            //let dummy = unsafe{TX_BUF[tx_buf_index]};
-            //info!("write byte {}", dummy);
 
             // TODO: is there a better solution than using unsafe?
             #[allow(unsafe_code)]
@@ -469,15 +363,9 @@ fn USART1() {
         }
     }
 
-    // Check for received data
     if sr.rxne() {
-        //info!("rxne");
-        let mut rx_buf_index = RX_BUF_INDEX.load(Ordering::Relaxed);
+        let rx_buf_index = RX_BUF_INDEX.load(Ordering::Relaxed);
         let rx_len = RX_LEN.load(Ordering::Relaxed);
-
-        // if rx_len == 0 {
-        //     return; //debugggggggggggg
-        // }
 
         let dr = uart.dr().read().dr() as u8;
 
@@ -496,50 +384,28 @@ fn USART1() {
         if rx_buf_index >= rx_len-1 {
             #[allow(unsafe_code)]
             unsafe {
-                // FINAL_TIME = embassy_time::Instant::now();
                 EN_CQ.as_mut().unwrap().set_level(Level::High);
             }
 
             uart.cr1().modify(|w| {
-                // w.set_re(false);
                 w.set_rxneie(false);
             });
             RX_DONE_SIGNAL.signal(());
-            info!("dummy");
         }
-
-
-        // unsafe {
-        //     if RX_COUNT < RX_BUFFER.len() {
-        //         RX_BUFFER[RX_COUNT] = received_byte;
-        //         RX_COUNT += 1;
-        //     }
-        // }
-
-        // Signal that data is available
-        // RX_DATA_READY.store(true, Ordering::Release);
-        // RX_SIGNAL.signal(received_byte);
-
-        //info!("USART1 RX----------------: {:#04x}", received_byte);
     }
 
-    // Check for overrun error
     if sr.ore() {
-        info!("USART1 Overrun error!");
-        // Clear ORE by reading SR then reading DR
-        let _dummy = uart.dr().read();
-    }
-
-    // Check for framing error
-    if sr.fe() {
-        info!("USART1 Framing error!");
-        // Clear FE by reading SR then reading DR
-        let _dummy = uart.dr().read();
-    }
-
-    // Check for parity error
-    if sr.pe() {
-        info!("USART1 Parity error!");
         let _ = uart.dr().read();
+        panic!("USART1 Overrun error!");
+    }
+
+    if sr.fe() {
+        let _ = uart.dr().read();
+        panic!("USART1 Framing error!");
+    }
+
+    if sr.pe() {
+        let _ = uart.dr().read();
+        panic!("USART1 Parity error!");
     }
 }
